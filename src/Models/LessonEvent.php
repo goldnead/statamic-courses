@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  */
 class LessonEvent extends Model
 {
-    protected $table = 'course_lesson_events';
+    protected $table = 'courses_lesson_events';
 
     protected $fillable = [
         'user_id',

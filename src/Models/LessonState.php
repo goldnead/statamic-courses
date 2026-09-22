@@ -30,7 +30,7 @@ use Illuminate\Support\Carbon;
  */
 class LessonState extends Model
 {
-    protected $table = 'course_lesson_states';
+    protected $table = 'courses_lesson_states';
 
     protected $fillable = [
         'user_id',

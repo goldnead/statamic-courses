@@ -61,7 +61,7 @@ Courses::acknowledgeLesson($user, 'cvt-101', 'reading');
 `canAccess()` first.
 
 Events: `LessonCompleted` on every transition to completed, `CourseCompleted` once per learner and
-course. Every start, quarter mark and completion is logged to `course_lesson_events`.
+course. Every start, quarter mark and completion is logged to `courses_lesson_events`. All tables carry the `courses_` prefix.
 
 ## Access
 

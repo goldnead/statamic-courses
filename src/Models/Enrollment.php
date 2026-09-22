@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  */
 class Enrollment extends Model
 {
-    protected $table = 'course_enrollments';
+    protected $table = 'courses_enrollments';
 
     protected $fillable = [
         'user_id',

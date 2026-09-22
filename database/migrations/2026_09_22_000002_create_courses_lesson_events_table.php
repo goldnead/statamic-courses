@@ -15,7 +15,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('course_lesson_events', function (Blueprint $table) {
+        Schema::create('courses_lesson_events', function (Blueprint $table) {
             $table->id();
             $table->string('user_id', 64)->index();
             $table->string('course_entry_id', 64)->index();
@@ -36,6 +36,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('course_lesson_events');
+        Schema::dropIfExists('courses_lesson_events');
     }
 };

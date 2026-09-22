@@ -17,12 +17,15 @@ use Illuminate\Support\Facades\Schema;
  *
  * String columns carry explicit lengths so the unique index stays inside
  * InnoDB's key limit under utf8mb4.
+ *
+ * The table carries the addon prefix: the source site already has a
+ * `course_lesson_states` with a different schema, and so may others.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('course_lesson_states', function (Blueprint $table) {
+        Schema::create('courses_lesson_states', function (Blueprint $table) {
             $table->id();
             $table->string('user_id', 64);
             $table->string('course_entry_id', 64)->index();
@@ -50,6 +53,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('course_lesson_states');
+        Schema::dropIfExists('courses_lesson_states');
     }
 };

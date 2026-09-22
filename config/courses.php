@@ -38,7 +38,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Every start, quarter mark and completion is written to the
-    | course_lesson_events table. Turn it off if nothing reads that table.
+    | courses_lesson_events table. Turn it off if nothing reads that table.
     |
     */
 
