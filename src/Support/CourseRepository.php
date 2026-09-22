@@ -18,8 +18,13 @@ use Statamic\Query\Builder;
  */
 class CourseRepository
 {
-    /** The lesson kinds this package knows how to complete. */
-    public const ITEM_TYPES = ['video', 'text', 'milestone'];
+    /**
+     * The lesson kinds the shipped blueprint offers, as the source site had
+     * them. Not a whitelist: any other type a site adds is kept as it is, and
+     * only a missing one reads as `video`, which is what the source did for the
+     * lessons it imported before types existed.
+     */
+    public const ITEM_TYPES = ['video', 'text', 'quiz', 'assignment', 'reflection', 'milestone', 'exercise', 'coaching'];
 
     public const SEQUENCING_MODES = ['none', 'section', 'lesson'];
 
@@ -36,7 +41,7 @@ class CourseRepository
     }
 
     /**
-     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string}|null
+     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string, url: string|null}|null
      */
     public function findCourse(string $slug): ?array
     {
@@ -49,7 +54,22 @@ class CourseRepository
     }
 
     /**
-     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string}
+     * @return list<array<string, mixed>>
+     */
+    public function allCourses(): array
+    {
+        return $this->entries()
+            ->where('collection', $this->coursesCollection())
+            ->orderBy('title')
+            ->get()
+            ->filter(fn ($entry): bool => $entry instanceof StatamicEntry)
+            ->map(fn (StatamicEntry $entry): array => $this->normalizeCourse($entry))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string, url: string|null}
      */
     public function normalizeCourse(StatamicEntry $entry): array
     {
@@ -66,6 +86,8 @@ class CourseRepository
             'product' => $product !== '' ? $product : (string) $entry->slug(),
             'sequencing_mode' => $this->oneOf($entry->get('sequencing_mode'), self::SEQUENCING_MODES, 'none'),
             'drip_mode' => $this->oneOf($entry->get('drip_mode'), self::DRIP_MODES, 'none'),
+            // Null when the collection has no route, as on the source site.
+            'url' => $entry->url(),
         ];
     }
 
@@ -76,8 +98,14 @@ class CourseRepository
      */
     public function lessonsFor(string $courseId): Collection
     {
+        // Asked of the index, not filtered in PHP. `course` is stored as a
+        // bare id with max_items 1; the whereJsonContains leg catches entries
+        // saved as a one-element list, and courseIdOf() keeps both honest.
         $entries = $this->entries()
             ->where('collection', $this->lessonsCollection())
+            ->where(fn ($query) => $query
+                ->where('course', $courseId)
+                ->orWhereJsonContains('course', $courseId))
             ->get()
             ->filter(fn ($entry): bool => $entry instanceof StatamicEntry && $this->courseIdOf($entry) === $courseId)
             ->values();
@@ -114,7 +142,8 @@ class CourseRepository
             'section_title' => (string) ($entry->get('section_title') ?? ''),
             'section_order' => (int) ($entry->get('section_order') ?? 0),
             'sort_order' => (int) ($entry->get('sort_order') ?? 0),
-            'item_type' => $this->oneOf($entry->get('item_type'), self::ITEM_TYPES, 'video'),
+            'item_type' => $this->stringOrNull($entry->get('item_type')) ?? 'video',
+            'is_test_out' => (bool) $entry->get('is_test_out'),
             'video_duration_seconds' => self::parseDurationSeconds($entry->get('video_duration')),
             'est_minutes' => $this->intOrNull($entry->get('est_minutes')),
             'phase_key' => $this->stringOrNull($entry->get('phase_key')),

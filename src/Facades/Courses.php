@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Facade;
  * @method static array<string, mixed>|null updateLessonProgress(mixed $user, string $courseSlug, string $lessonSlug, array $payload)
  * @method static array<string, mixed>|null setLessonCompletion(mixed $user, string $courseSlug, string $lessonSlug, bool $completed)
  * @method static array<string, mixed>|null acknowledgeLesson(mixed $user, string $courseSlug, string $lessonSlug, bool $completed = true)
+ * @method static array<string, mixed>|null completeLesson(mixed $user, string $courseSlug, string $lessonSlug, string $source, ?array $payload = null)
+ * @method static array<string, mixed>|null updateLessonItem(mixed $user, string $courseSlug, string $lessonSlug, array $payload)
+ * @method static list<array<string, mixed>> courses()
+ * @method static list<array<string, mixed>>|null lessons(mixed $user, string $courseSlug)
  *
  * @see CourseProgress
  */

@@ -30,11 +30,23 @@ tabs:
               type: select
               display: Type
               default: video
-              instructions: 'Decides how the lesson is completed: a video by watching, text and milestones by acknowledging.'
+              instructions: 'Decides how the lesson is completed: a video by watching, text, milestone, coaching and exercise by acknowledging, quiz and assignment only through the site that checks them.'
               options:
                 video: Video
                 text: Text
+                quiz: Quiz
+                assignment: Assignment
+                reflection: Reflection
                 milestone: Milestone
+                exercise: Exercise
+                coaching: Coaching
+          -
+            handle: is_test_out
+            field:
+              type: toggle
+              display: 'Test-out'
+              default: false
+              instructions: 'Stays open while its phase is locked. Passing it completes the earlier phases.'
           -
             handle: content
             field:

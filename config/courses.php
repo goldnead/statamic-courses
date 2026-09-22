@@ -34,6 +34,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Lessons that need their own proof
+    |--------------------------------------------------------------------------
+    |
+    | A learner cannot tick these off by hand (setLessonCompletion, the POST
+    | route). They complete when the code that checked the proof calls
+    | Courses::completeLesson(), e.g. after grading a quiz.
+    |
+    */
+
+    'proof_required_types' => ['quiz', 'assignment'],
+
+    /*
+    |--------------------------------------------------------------------------
     | Progress events
     |--------------------------------------------------------------------------
     |

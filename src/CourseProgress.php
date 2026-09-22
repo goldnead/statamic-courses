@@ -29,6 +29,12 @@ use Illuminate\Support\Collection;
  */
 class CourseProgress
 {
+    /**
+     * Lessons completed by "I've done it": no player, nothing to grade. The
+     * list the source site's acknowledgeLesson() accepted.
+     */
+    public const ACKNOWLEDGEABLE_TYPES = ['text', 'milestone', 'coaching', 'exercise'];
+
     public function __construct(
         protected CourseRepository $courses,
         protected LockResolver $locks,
@@ -42,6 +48,16 @@ class CourseProgress
     public function course(string $courseSlug): ?array
     {
         return $this->courses->findCourse($courseSlug);
+    }
+
+    /**
+     * Every course, in title order.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function courses(): array
+    {
+        return $this->courses->allCourses();
     }
 
     public function canAccess(mixed $user, string $courseSlug): bool
@@ -119,6 +135,25 @@ class CourseProgress
     }
 
     /**
+     * Every lesson in reading order, flat, each with its progress and lock.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function lessons(mixed $user, string $courseSlug): ?array
+    {
+        $context = $this->context($user, $courseSlug);
+
+        if ($context === null) {
+            return null;
+        }
+
+        return $context['lessons']
+            ->map(fn (array $lesson): array => [...$lesson, ...$this->lessonRow($context, $lesson)])
+            ->values()
+            ->all();
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     public function lesson(mixed $user, string $courseSlug, string $lessonSlug): ?array
@@ -183,13 +218,16 @@ class CourseProgress
         $state->save();
 
         $this->events->progressUpdated($state, $previous, isset($payload['playback_state']) ? (string) $payload['playback_state'] : null);
-        $this->afterWrite($state, $previous['status'], 'auto', $context);
 
-        return $this->lesson($user, $courseSlug, $lessonSlug);
+        return $this->afterWrite([[$state, $previous['status']]], 'auto', $context, $lessonSlug);
     }
 
     /**
      * The learner's own "done" or "not done yet". Overrides what watching decided.
+     *
+     * Refused for the lesson types in `courses.proof_required_types` (quiz and
+     * assignment by default): those complete through {@see completeLesson()},
+     * which the code that graded the proof calls.
      *
      * @return array<string, mixed>|null
      */
@@ -197,7 +235,7 @@ class CourseProgress
     {
         [$context, $lesson] = $this->writable($user, $courseSlug, $lessonSlug);
 
-        if ($lesson === null) {
+        if ($lesson === null || $this->needsProof($lesson)) {
             return null;
         }
 
@@ -228,15 +266,13 @@ class CourseProgress
         $state->save();
 
         $this->events->manualCompletion($state, $completed);
-        $this->afterWrite($state, $previousStatus, 'manual', $context);
 
-        return $this->lesson($user, $courseSlug, $lessonSlug);
+        return $this->afterWrite([[$state, $previousStatus]], 'manual', $context, $lessonSlug);
     }
 
     /**
-     * "Read it" for lessons without a player: text and milestones. Video lessons
-     * are refused, since they complete through {@see updateLessonProgress()} or
-     * {@see setLessonCompletion()}.
+     * "Done" for lessons without a player or a grade: text, milestones,
+     * coaching, exercises. Other types are refused.
      *
      * @return array<string, mixed>|null
      */
@@ -244,10 +280,77 @@ class CourseProgress
     {
         [$context, $lesson] = $this->writable($user, $courseSlug, $lessonSlug);
 
-        if ($lesson === null || ! in_array($lesson['item_type'], ['text', 'milestone'], true)) {
+        if ($lesson === null || ! in_array($lesson['item_type'], self::ACKNOWLEDGEABLE_TYPES, true)) {
             return null;
         }
 
+        return $this->afterWrite([$this->writeItemState($context, $lesson, $completed, null)], 'manual', $context, $lessonSlug);
+    }
+
+    /**
+     * Completes a lesson on the word of the code that checked it: a graded quiz,
+     * an accepted assignment, a held coaching session. `$source` names that
+     * code and travels on the LessonCompleted event; `$payload` is merged into
+     * the lesson's item_payload (score, submission, note).
+     *
+     * A passed test-out lesson also completes every lesson of the earlier
+     * phases, marked `skipped`, so the learner lands behind them.
+     *
+     * @param  array<string, mixed>|null  $payload
+     * @return array<string, mixed>|null
+     */
+    public function completeLesson(mixed $user, string $courseSlug, string $lessonSlug, string $source, ?array $payload = null): ?array
+    {
+        [$context, $lesson] = $this->writable($user, $courseSlug, $lessonSlug);
+
+        if ($lesson === null) {
+            return null;
+        }
+
+        $written = [$this->writeItemState($context, $lesson, true, $payload)];
+
+        if ($lesson['is_test_out'] ?? false) {
+            array_push($written, ...$this->skipEarlierPhases($context, $lesson));
+        }
+
+        return $this->afterWrite($written, $source, $context, $lessonSlug);
+    }
+
+    /**
+     * Records work on a lesson that is not done yet: a failed quiz attempt, a
+     * reflection draft, an exercise run. Merges `$payload` into item_payload
+     * and marks the lesson started. The source's writeItemState() with
+     * markInProgress.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null
+     */
+    public function updateLessonItem(mixed $user, string $courseSlug, string $lessonSlug, array $payload): ?array
+    {
+        [$context, $lesson] = $this->writable($user, $courseSlug, $lessonSlug);
+
+        if ($lesson === null) {
+            return null;
+        }
+
+        $written = $this->writeItemState($context, $lesson, false, $payload, markInProgress: true);
+
+        return $this->afterWrite([$written], 'item', $context, $lessonSlug);
+    }
+
+    // ---------------------------------------------------------------------
+
+    /**
+     * Persists a completion or a "started" for a lesson without a player.
+     * From the source's writeItemState().
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $lesson
+     * @param  array<string, mixed>|null  $payloadPatch
+     * @return array{0: LessonState, 1: string}
+     */
+    protected function writeItemState(array $context, array $lesson, bool $completed, ?array $payloadPatch, bool $markInProgress = false): array
+    {
         $state = $this->stateFor($context, $lesson);
         $previousStatus = (string) ($state->status ?? LessonStatus::NotStarted->value);
         $now = now();
@@ -255,7 +358,11 @@ class CourseProgress
         if ($completed) {
             $status = LessonStatus::Completed;
             $manual = LessonProgress::MANUAL_COMPLETED;
-        } elseif ($previousStatus !== LessonStatus::NotStarted->value) {
+        } elseif ($markInProgress && $previousStatus === LessonStatus::Completed->value) {
+            // More work on a finished lesson (a retake) does not reopen it.
+            $status = LessonStatus::Completed;
+            $manual = LessonProgress::normalizeManual($state->manual_completion_state);
+        } elseif ($markInProgress || $previousStatus !== LessonStatus::NotStarted->value) {
             $status = LessonStatus::InProgress;
             $manual = LessonProgress::MANUAL_INCOMPLETE;
         } else {
@@ -266,11 +373,14 @@ class CourseProgress
         $state->fill([
             ...$this->identity($context, $lesson),
             'status' => $status->value,
-            'completion_percent' => $completed ? 100 : (int) ($state->completion_percent ?? 0),
+            'completion_percent' => $status === LessonStatus::Completed ? 100 : (int) ($state->completion_percent ?? 0),
             'manual_completion_state' => $manual,
+            'item_payload' => $payloadPatch !== null
+                ? array_merge(is_array($state->item_payload) ? $state->item_payload : [], $payloadPatch)
+                : $state->item_payload,
             'first_started_at' => $state->first_started_at ?? $now,
             'last_activity_at' => $now,
-            'completed_at' => $completed ? ($state->completed_at ?? $now) : null,
+            'completed_at' => $status === LessonStatus::Completed ? ($state->completed_at ?? $now) : null,
         ]);
         $state->save();
 
@@ -278,12 +388,42 @@ class CourseProgress
             $this->events->manualCompletion($state, true);
         }
 
-        $this->afterWrite($state, $previousStatus, 'manual', $context);
-
-        return $this->lesson($user, $courseSlug, $lessonSlug);
+        return [$state, $previousStatus];
     }
 
-    // ---------------------------------------------------------------------
+    /**
+     * From the source's skipCompleteEarlierPhases().
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $testOut
+     * @return list<array{0: LessonState, 1: string}>
+     */
+    protected function skipEarlierPhases(array $context, array $testOut): array
+    {
+        $order = $testOut['phase_order'] ?? null;
+
+        if ($order === null) {
+            return [];
+        }
+
+        $written = [];
+
+        foreach ($context['lessons'] as $lesson) {
+            $lessonOrder = $lesson['phase_order'] ?? null;
+
+            if ($lessonOrder === null || $lessonOrder >= $order || ($lesson['is_test_out'] ?? false)) {
+                continue;
+            }
+
+            if (($context['progress'][$lesson['slug']]['status'] ?? null) === LessonStatus::Completed->value) {
+                continue;
+            }
+
+            $written[] = $this->writeItemState($context, $lesson, true, ['skipped' => true]);
+        }
+
+        return $written;
+    }
 
     /**
      * Everything a read needs, loaded once: course, lessons, the learner's
@@ -295,11 +435,15 @@ class CourseProgress
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        if ($course === null) {
-            return null;
-        }
+        return $course === null ? null : $this->contextFor(LearnerId::of($user), $course);
+    }
 
-        $userId = LearnerId::of($user);
+    /**
+     * @param  array<string, mixed>  $course
+     * @return array{user_id: string, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}
+     */
+    protected function contextFor(string $userId, array $course): array
+    {
         $lessons = $this->courses->lessonsFor($course['id']);
 
         $states = $lessons->isEmpty() ? collect() : LessonState::query()
@@ -427,6 +571,7 @@ class CourseProgress
         $opensAt = $locked && $context['course']['drip_mode'] === 'schedule'
             ? $this->locks->weekOpensAt($context['enrollment'], $lesson['week'])
             : null;
+        $progress = $context['progress'][$lesson['slug']] ?? LessonProgress::empty($lesson);
 
         return [
             'slug' => $lesson['slug'],
@@ -434,8 +579,10 @@ class CourseProgress
             'sort_order' => $lesson['sort_order'],
             'url' => $lesson['url'],
             'item_type' => $lesson['item_type'],
-            'progress' => $context['progress'][$lesson['slug']] ?? LessonProgress::empty($lesson),
+            'progress' => $progress,
             'is_locked' => $locked,
+            'is_completed' => $progress['status'] === LessonStatus::Completed->value,
+            'lock_reason' => $locked ? $this->locks->reason($context['lessons'], $context['progress'], $lesson, $context['course']['sequencing_mode'], $opensAt) : null,
             'available_at' => $opensAt?->toIso8601String(),
         ];
     }
@@ -461,15 +608,29 @@ class CourseProgress
     }
 
     /**
+     * @param  array<string, mixed>  $lesson
+     */
+    protected function needsProof(array $lesson): bool
+    {
+        $types = config('courses.proof_required_types', ['quiz', 'assignment']);
+
+        return is_array($types) && in_array($lesson['item_type'], $types, true);
+    }
+
+    /**
+     * The learner's row for a lesson, created on first touch. Insert first and
+     * read on collision, so two first writes racing each other end on one row
+     * instead of a unique-index exception.
+     *
      * @param  array<string, mixed>  $context
      * @param  array<string, mixed>  $lesson
      */
     protected function stateFor(array $context, array $lesson): LessonState
     {
-        return LessonState::query()->firstOrNew([
-            'user_id' => $context['user_id'],
-            'lesson_entry_id' => $lesson['id'],
-        ]);
+        return LessonState::query()->createOrFirst(
+            ['user_id' => $context['user_id'], 'lesson_entry_id' => $lesson['id']],
+            [...$this->identity($context, $lesson), 'status' => LessonStatus::NotStarted->value],
+        );
     }
 
     /**
@@ -502,29 +663,43 @@ class CourseProgress
     }
 
     /**
-     * Fires the completion events on the transition, never on a repeat save.
+     * Rebuilds the context once after a write, fires the completion events for
+     * every lesson that just turned completed, and answers with the lesson.
+     *
+     * @param  list<array{0: LessonState, 1: string}>  $written  state and its status before the write
+     * @param  array<string, mixed>  $context  the context before the write
+     * @return array<string, mixed>|null
+     */
+    protected function afterWrite(array $written, string $source, array $context, string $lessonSlug): ?array
+    {
+        $fresh = $this->contextFor($context['user_id'], $context['course']);
+        $anyCompleted = false;
+
+        foreach ($written as [$state, $previousStatus]) {
+            if ($state->status === LessonStatus::Completed->value && $previousStatus !== LessonStatus::Completed->value) {
+                LessonCompleted::dispatch($state, $source);
+                $anyCompleted = true;
+            }
+        }
+
+        if ($anyCompleted && $this->summaryFromContext($fresh)['status'] === LessonStatus::Completed->value) {
+            $this->markCourseCompleted($fresh);
+        }
+
+        return $this->lessonFromContext($fresh, $lessonSlug);
+    }
+
+    /**
+     * The enrollment carries the "already announced" flag, so reopening a
+     * lesson and completing it again does not complete the course twice.
      *
      * @param  array<string, mixed>  $context
      */
-    protected function afterWrite(LessonState $state, string $previousStatus, string $source, array $context): void
+    protected function markCourseCompleted(array $context): void
     {
-        if ($state->status !== LessonStatus::Completed->value || $previousStatus === LessonStatus::Completed->value) {
-            return;
-        }
-
-        LessonCompleted::dispatch($state, $source);
-
-        $fresh = $this->context($context['user_id'], $context['course']['slug']);
-
-        if ($fresh === null || $this->summaryFromContext($fresh)['status'] !== LessonStatus::Completed->value) {
-            return;
-        }
-
-        // The enrollment carries the "already announced" flag, so reopening a
-        // lesson and completing it again does not complete the course twice.
         $enrollment = Enrollment::query()->createOrFirst(
             ['user_id' => $context['user_id'], 'course_entry_id' => $context['course']['id']],
-            ['current_week' => 1, 'started_at' => $state->first_started_at ?? now()],
+            ['current_week' => 1, 'started_at' => now()],
         );
 
         if ($enrollment->completed_at !== null) {

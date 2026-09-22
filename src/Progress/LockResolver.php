@@ -98,7 +98,8 @@ class LockResolver
         }
         foreach ($lessons as $lesson) {
             $order = $lesson['phase_order'] ?? null;
-            if ($order === null) {
+            // A test-out stays reachable, so a learner can skip ahead.
+            if ($order === null || ($lesson['is_test_out'] ?? false)) {
                 continue;
             }
             foreach ($phaseComplete as $otherOrder => $complete) {
@@ -127,6 +128,42 @@ class LockResolver
         }
 
         return $lockMap;
+    }
+
+    /**
+     * Why a locked lesson is locked, as a stable code a template can translate:
+     * `schedule`, `prerequisite`, `phase` or `sequence`. The first gate that
+     * holds wins, in the order a learner can do least about.
+     *
+     * @param  Collection<int, array<string, mixed>>  $lessons
+     * @param  array<string, array<string, mixed>>  $progressMap
+     * @param  array<string, mixed>  $lesson
+     */
+    public function reason(Collection $lessons, array $progressMap, array $lesson, string $sequencingMode, ?CarbonInterface $opensAt): string
+    {
+        if ($opensAt !== null) {
+            return 'schedule';
+        }
+
+        $isCompleted = $this->completedCheck($progressMap);
+
+        foreach ($lesson['prerequisite_slugs'] ?? [] as $prerequisite) {
+            if (! $isCompleted((string) $prerequisite)) {
+                return 'prerequisite';
+            }
+        }
+
+        $order = $lesson['phase_order'] ?? null;
+
+        if ($order !== null && ! ($lesson['is_test_out'] ?? false)) {
+            foreach ($lessons as $other) {
+                if (($other['phase_order'] ?? null) !== null && $other['phase_order'] < $order && ! $isCompleted($other['slug'])) {
+                    return 'phase';
+                }
+            }
+        }
+
+        return $sequencingMode !== 'none' ? 'sequence' : 'schedule';
     }
 
     /**
