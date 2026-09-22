@@ -20,14 +20,24 @@ abstract class TestCase extends AddonTestCase
     {
         parent::setUp();
 
-        // The addon manifest only lists this package, so the entitlements
-        // sibling never gets its own bootAddon() from Statamic here. Its
-        // migrations are needed for the access tests, hence the manual call.
-        $this->app->getProvider(\Goldnead\Entitlements\ServiceProvider::class)?->bootAddon();
         $this->app->getProvider(ServiceProvider::class)?->bootAddon();
 
-        $this->artisan('migrate')->run();
         $this->artisan('courses:install')->run();
+    }
+
+    /**
+     * Registered here, not by a `migrate` call in setUp(): Testbench runs this
+     * before RefreshDatabase opens its transaction. DDL inside that transaction
+     * commits it implicitly under MySQL, and the next savepoint (createOrFirst
+     * uses one) then fails with "SAVEPOINT trans2 does not exist".
+     *
+     * The entitlements sibling's migrations are listed too: the addon manifest
+     * names only this package, so Statamic never boots that one here.
+     */
+    protected function defineDatabaseMigrations(): void
+    {
+        $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-entitlements/database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
 
     protected function getPackageProviders($app)
