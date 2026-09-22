@@ -38,6 +38,7 @@ abstract class TestCase extends AddonTestCase
     {
         $this->loadMigrationsFrom(__DIR__.'/../vendor/goldnead/statamic-entitlements/database/migrations');
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom(__DIR__.'/Fixtures/migrations');
     }
 
     protected function getPackageProviders($app)

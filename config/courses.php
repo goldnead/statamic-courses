@@ -53,10 +53,13 @@ return [
     | Eloquent model (a flat-file Statamic user, a bare id). It must match the
     | type the grants were written with, or every course stays closed.
     |
+    | Null picks it for you: the morph class of the auth user model when
+    | Statamic's users live in Eloquent, `user` when they are flat files.
+    |
     */
 
     'entitlements' => [
-        'subject_type' => 'user',
+        'subject_type' => env('COURSES_SUBJECT_TYPE'),
     ],
 
 ];

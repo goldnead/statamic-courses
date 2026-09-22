@@ -66,8 +66,18 @@ course. Every start, quarter mark and completion is logged to `courses_lesson_ev
 ## Access
 
 `Goldnead\Courses\Contracts\CourseAccess` is the seam. With statamic-entitlements installed it asks
-`Entitlements::allows()`; without it every course is closed. A learner that is not an Eloquent
-model is looked up as subject type `courses.entitlements.subject_type` (default `user`).
+`Entitlements::allows()`; without it every course is closed.
+
+How a learner reaches entitlements: an Eloquent model passes through; a Statamic eloquent user
+(`User::current()` on an eloquent install) is unwrapped to its model; anything else is looked up as
+subject type `courses.entitlements.subject_type`. Unset, that is the auth model's morph class on an
+eloquent install and `user` on a flat-file one.
+
+A host with its own access rules binds its own implementation, and it wins over the default:
+
+```php
+$this->app->bind(\Goldnead\Courses\Contracts\CourseAccess::class, MyCourseAccess::class);
+```
 
 ## Tests
 
