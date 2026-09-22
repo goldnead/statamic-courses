@@ -125,7 +125,8 @@ class ServiceProvider extends AddonServiceProvider
 
             $nav->create(__('courses::cp.nav'))
                 ->section($section)
-                ->icon('chart-monitoring-indicator')
+                // Not chart-monitoring-indicator: insights' nav entry wears it.
+                ->icon('content-book-open')
                 ->route('courses.progress.index')
                 ->can('view course progress');
         });

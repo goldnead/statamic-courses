@@ -8,6 +8,7 @@ use Goldnead\Courses\Enums\LessonStatus;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonState;
 use Illuminate\Support\Carbon;
+use Statamic\Facades\Entry;
 
 /**
  * One row per course for the "Course Progress" screen.
@@ -38,6 +39,13 @@ class ProgressReport
             ->map(fn (array $course): array => $this->row($course, $stuckBefore))
             ->values()
             ->all();
+    }
+
+    protected function editUrl(string $entryId): ?string
+    {
+        $entry = Entry::find($entryId);
+
+        return $entry instanceof \Statamic\Entries\Entry ? $entry->editUrl() : null;
     }
 
     public function stuckAfterDays(): int
@@ -87,6 +95,7 @@ class ProgressReport
             'id' => $course['id'],
             'slug' => $course['slug'],
             'title' => $course['title'],
+            'edit_url' => $this->editUrl($course['id']),
             'learners' => $total,
             'in_progress' => $inProgress,
             'completed' => $completed,

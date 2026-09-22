@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 use Statamic\CP\Column;
+use Statamic\Facades\Collection;
 use Statamic\Http\Controllers\CP\CpController;
 
 /**
@@ -22,11 +23,20 @@ class ProgressController extends CpController
         Gate::authorize('view course progress');
 
         $rows = $report->overview();
+        $handle = (string) config('courses.collections.courses', 'courses');
+        $hasCollection = Collection::find($handle) !== null;
 
         return Inertia::render('courses::Progress/Index', [
             'rows' => $rows,
             'initialColumns' => collect($this->columns())->map->toArray()->all(),
             'hasLearners' => collect($rows)->sum('learners') > 0,
+            // The install hint is for a site without the collection. With it,
+            // the table shows, zeros and all.
+            'hasCollection' => $hasCollection,
+            // The CP user's language, set by core's Localize middleware. The
+            // page formats dates in it instead of the browser's.
+            'locale' => str_replace('_', '-', app()->getLocale()),
+            'collectionUrl' => $hasCollection ? cp_route('collections.show', $handle) : null,
             'stuckHelp' => __('courses::cp.stuck_help', ['days' => $report->stuckAfterDays()]),
         ]);
     }

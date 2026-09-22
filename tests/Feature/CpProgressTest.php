@@ -1,11 +1,14 @@
 <?php
 
 use Goldnead\Courses\Facades\Courses;
+use Goldnead\Courses\Models\Enrollment;
+use Goldnead\Courses\Models\LessonState;
 use Goldnead\Courses\Support\ProgressReport;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
+use Statamic\Facades\Collection;
 use Statamic\Facades\Permission;
 use Statamic\Facades\Role;
 use Statamic\Facades\User;
@@ -105,6 +108,36 @@ it('shows the page to a user with the permission', function () {
             ->has('initialColumns', 7));
 });
 
+it('links each course to its entry and the page to the collection', function () {
+    $this->actingAs(cpUser(['view course progress']))
+        ->get(cp_route('courses.progress.index'))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('hasCollection', true)
+            ->where('locale', 'en')
+            ->where('collectionUrl', cp_route('collections.show', 'courses'))
+            ->where('rows.0.edit_url', fn ($url) => str_contains((string) $url, '/collections/courses/entries/')));
+});
+
+it('shows the table, not the install hint, when courses exist but nobody has started', function () {
+    LessonState::query()->delete();
+    Enrollment::query()->delete();
+
+    $this->actingAs(cpUser(['view course progress']))
+        ->get(cp_route('courses.progress.index'))
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('hasCollection', true)
+            ->where('hasLearners', false)
+            ->has('rows', 2));
+});
+
+it('offers the install hint only when the course collection does not exist', function () {
+    Collection::find('courses')->delete();
+
+    $this->actingAs(cpUser(['view course progress']))
+        ->get(cp_route('courses.progress.index'))
+        ->assertInertia(fn (AssertableInertia $page) => $page->where('hasCollection', false));
+});
+
 it('refuses a CP user without the permission', function () {
     // Core turns a failed `can:` in the CP into a redirect with an error
     // toast rather than a bare 403. Either way the page must not render.
@@ -155,6 +188,7 @@ it('adds the nav item under Content without the suite section, gated by the perm
         'section' => 'Content',
         'route' => 'courses.progress.index',
         'can' => 'view course progress',
-        'icon' => 'chart-monitoring-indicator',
+        // Not chart-monitoring-indicator: insights' "Auswertung" wears that one.
+        'icon' => 'content-book-open',
     ]);
 });

@@ -15,7 +15,8 @@ return [
     'col_last_activity' => 'Letzte Aktivität',
 
     'stuck_help' => 'Begonnen, nicht fertig, seit :days Tagen keine Aktivität.',
-    'empty_heading' => 'Noch kein Kurs hat Lernende.',
+    'open_courses' => 'Kurse öffnen',
+    'empty_heading' => 'Es gibt noch keine Kurs-Sammlung.',
     'empty_install_heading' => 'Kurse anlegen',
     'empty_install_description' => 'php artisan courses:install ausführen, dann Kurse und Lektionen als Einträge anlegen.',
     'empty_docs_heading' => 'Dokumentation lesen',

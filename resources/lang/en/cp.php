@@ -15,7 +15,8 @@ return [
     'col_last_activity' => 'Last activity',
 
     'stuck_help' => 'Started, not finished, no activity for :days days.',
-    'empty_heading' => 'No course has a learner yet.',
+    'open_courses' => 'Open courses',
+    'empty_heading' => 'There is no course collection yet.',
     'empty_install_heading' => 'Create courses',
     'empty_install_description' => 'Run php artisan courses:install, then add courses and lessons as entries.',
     'empty_docs_heading' => 'Read the documentation',
