@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (2026-09-22)
+
+First release, extracted from adriangoldner.com.
 
 ### Added
 - Course and lesson collections with blueprints and routes, installed by `courses:install`.
