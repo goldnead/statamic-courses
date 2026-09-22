@@ -15,6 +15,7 @@ import {
 
 const props = defineProps({
     locale: { type: String, default: null },
+    setupRequired: { type: Boolean, default: false },
     rows: { type: Array, required: true },
     initialColumns: { type: Array, required: true },
     hasLearners: { type: Boolean, default: false },
@@ -45,7 +46,25 @@ function formatDate(value) {
     <Head :title="__('courses::cp.title')" />
 
     <div class="max-w-page mx-auto">
-        <template v-if="!hasCollection">
+        <template v-if="setupRequired">
+            <header class="py-8 pt-16 text-center">
+                <h1 class="text-[25px] font-medium antialiased flex justify-center items-center gap-2 sm:gap-3">
+                    <Icon name="content-book-open" class="size-5 text-gray-500" />{{ __('courses::cp.title') }}
+                </h1>
+            </header>
+
+            <EmptyStateMenu :heading="__('courses::cp.setup_heading')">
+                <EmptyStateItem
+                    icon="content-book-open"
+                    :heading="__('courses::cp.setup_migrate_heading')"
+                    :description="__('courses::cp.setup_migrate_description')"
+                    :href="docsUrl"
+                    target="_blank"
+                />
+            </EmptyStateMenu>
+        </template>
+
+        <template v-else-if="!hasCollection">
             <!-- Core's empty state is a centred h1 rather than <Header>; see pages/forms/Index.vue. -->
             <header class="py-8 pt-16 text-center">
                 <h1 class="text-[25px] font-medium antialiased flex justify-center items-center gap-2 sm:gap-3">

@@ -2,8 +2,12 @@
 
 namespace Goldnead\Courses\Http\Controllers\Cp;
 
+use Goldnead\Courses\Models\Enrollment;
+use Goldnead\Courses\Models\LessonState;
 use Goldnead\Courses\Support\ProgressReport;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 use Statamic\CP\Column;
@@ -21,6 +25,17 @@ class ProgressController extends CpController
     public function index(ProgressReport $report): Response
     {
         Gate::authorize('view course progress');
+
+        // A fresh install whose migrations have not run gets a sentence, not a 500.
+        if (! Schema::hasTable((new LessonState)->getTable()) || ! Schema::hasTable((new Enrollment)->getTable())) {
+            Log::warning('statamic-courses: the course tables are missing; run php artisan migrate.');
+
+            return Inertia::render('courses::Progress/Index', [
+                'rows' => [],
+                'initialColumns' => [],
+                'setupRequired' => true,
+            ]);
+        }
 
         $rows = $report->overview();
         $handle = (string) config('courses.collections.courses', 'courses');

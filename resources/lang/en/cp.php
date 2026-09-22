@@ -16,6 +16,9 @@ return [
 
     'stuck_help' => 'Started, not finished, no activity for :days days.',
     'open_courses' => 'Open courses',
+    'setup_heading' => 'The course tables do not exist yet.',
+    'setup_migrate_heading' => 'Run the migrations',
+    'setup_migrate_description' => 'php artisan migrate creates them.',
     'empty_heading' => 'There is no course collection yet.',
     'empty_install_heading' => 'Create courses',
     'empty_install_description' => 'Run php artisan courses:install, then add courses and lessons as entries.',

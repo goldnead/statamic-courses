@@ -138,6 +138,26 @@ it('offers the install hint only when the course collection does not exist', fun
         ->assertInertia(fn (AssertableInertia $page) => $page->where('hasCollection', false));
 });
 
+it('shows a setup hint instead of a 500 when the migrations have not run', function () {
+    $user = cpUser(['view course progress']);
+
+    // No DDL inside the test (it would commit the transaction under MySQL):
+    // point the default connection at an empty database for the request.
+    config()->set('database.connections.empty', ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']);
+    config()->set('database.default', 'empty');
+    DB::purge('empty');
+
+    $this->actingAs($user)
+        ->get(cp_route('courses.progress.index'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('courses::Progress/Index')
+            ->where('setupRequired', true)
+            ->where('rows', []));
+
+    config()->set('database.default', 'testing');
+});
+
 it('refuses a CP user without the permission', function () {
     // Core turns a failed `can:` in the CP into a redirect with an error
     // toast rather than a bare 403. Either way the page must not render.
