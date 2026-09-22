@@ -22,6 +22,10 @@ class Install extends Command
 
     public function handle(): int
     {
+        // The command object outlives one run (the console kernel keeps it),
+        // so the locale is read fresh every time.
+        $this->dictionary = null;
+
         $courses = (string) config('courses.collections.courses', 'courses');
         $lessons = (string) config('courses.collections.lessons', 'course_lessons');
 
@@ -30,8 +34,8 @@ class Install extends Command
         // field values, so `course:slug` would find an id, not an entry. A site
         // that serves lessons elsewhere (or not at all) changes or clears the
         // route; urls are then null and nothing in this package breaks.
-        $this->ensureCollection($courses, 'Courses', '/courses/{slug}');
-        $this->ensureCollection($lessons, 'Course Lessons', '/courses/{course_slug}/{slug}');
+        $this->ensureCollection($courses, $this->translate('Courses'), '/courses/{slug}');
+        $this->ensureCollection($lessons, $this->translate('Course Lessons'), '/courses/{course_slug}/{slug}');
 
         $this->ensureBlueprint($courses, 'course', $courses, $lessons);
         $this->ensureBlueprint($lessons, 'course_lesson', $courses, $lessons);
@@ -65,7 +69,7 @@ class Install extends Command
         }
 
         $contents = YAML::parse((string) file_get_contents(__DIR__.'/../../../resources/blueprints/'.$handle.'.yaml'));
-        $contents = $this->pointEntriesFieldsAt($contents, $courses, $lessons);
+        $contents = $this->localize($this->pointEntriesFieldsAt($contents, $courses, $lessons));
 
         Blueprint::make($handle)
             ->setNamespace($namespace)
@@ -73,6 +77,64 @@ class Install extends Command
             ->save();
 
         $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'written');
+    }
+
+    /**
+     * Labels are written in the site's language (`app.locale`), from
+     * resources/lang/{locale}.json. They are written, not translated at
+     * runtime: registering these generic strings ("Main", "Content", "Type")
+     * as JSON translations would re-translate core's own UI as well. A site
+     * without a translation file for its language gets English.
+     *
+     * @param  array<string, mixed>  $contents
+     * @return array<string, mixed>
+     */
+    protected function localize(array $contents): array
+    {
+        foreach ($contents as $key => $value) {
+            if (in_array($key, ['title', 'display', 'instructions'], true) && is_string($value)) {
+                $contents[$key] = $this->translate($value);
+            } elseif ($key === 'options' && is_array($value)) {
+                $contents[$key] = array_map(fn ($label) => is_string($label) ? $this->translate($label) : $label, $value);
+            } elseif (is_array($value)) {
+                $contents[$key] = $this->localize($value);
+            }
+        }
+
+        return $contents;
+    }
+
+    protected function translate(string $english): string
+    {
+        return $this->dictionary()[$english] ?? $english;
+    }
+
+    /** @var array<string, string>|null */
+    protected ?array $dictionary = null;
+
+    /**
+     * @return array<string, string>
+     */
+    protected function dictionary(): array
+    {
+        if ($this->dictionary !== null) {
+            return $this->dictionary;
+        }
+
+        $locale = (string) config('app.locale', 'en');
+        $directory = __DIR__.'/../../../resources/lang/';
+
+        foreach ([$locale, strtok(str_replace('-', '_', $locale), '_')] as $candidate) {
+            $file = $directory.$candidate.'.json';
+
+            if (is_string($candidate) && $candidate !== '' && is_file($file)) {
+                $decoded = json_decode((string) file_get_contents($file), true);
+
+                return $this->dictionary = is_array($decoded) ? $decoded : [];
+            }
+        }
+
+        return $this->dictionary = [];
     }
 
     /**

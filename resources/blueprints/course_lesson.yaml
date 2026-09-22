@@ -30,7 +30,7 @@ tabs:
               type: select
               display: Type
               default: video
-              instructions: 'Decides how the lesson is completed: a video by watching, text, milestone, coaching and exercise by acknowledging, quiz and assignment only through the site that checks them.'
+              instructions: 'How the lesson is completed: a video by watching, text, milestone, coaching and exercise by a click, quiz, assignment and reflection only by the site that checks them.'
               options:
                 video: Video
                 text: Text
@@ -65,6 +65,7 @@ tabs:
               display: 'Estimated minutes'
       -
         display: Structure
+        instructions: 'A later phase stays locked until every earlier phase is completed. With drip by schedule, a lesson opens in its week after enrollment.'
         fields:
           -
             handle: section_key
@@ -95,7 +96,6 @@ tabs:
             field:
               type: text
               display: 'Phase key'
-              instructions: 'Lessons of a later phase stay locked until every earlier phase is completed.'
               width: 33
           -
             handle: phase_title
@@ -108,14 +108,13 @@ tabs:
             field:
               type: integer
               display: 'Phase order'
-              width: 33
+              width: 50
           -
             handle: week
             field:
               type: integer
               display: Week
-              instructions: 'With drip by schedule: the lesson opens in this week after enrollment.'
-              width: 33
+              width: 50
           -
             handle: prerequisite_lessons
             field:
