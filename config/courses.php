@@ -59,6 +59,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Front-end route
+    |--------------------------------------------------------------------------
+    |
+    | POST /!/courses/progress lets a signed-in learner mark lessons from a
+    | template form ({{ courses:form }}). A site with its own endpoints turns it
+    | off; the form tag then renders nothing.
+    |
+    */
+
+    'routes' => [
+        'enabled' => (bool) env('COURSES_ROUTES_ENABLED', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Entitlements
     |--------------------------------------------------------------------------
     |

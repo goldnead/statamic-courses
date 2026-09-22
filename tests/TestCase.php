@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Tests;
 
 use Goldnead\Courses\ServiceProvider;
+use Goldnead\Courses\Tags\Courses;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Statamic\Facades\Entry;
@@ -21,6 +22,10 @@ abstract class TestCase extends AddonTestCase
         parent::setUp();
 
         $this->app->getProvider(ServiceProvider::class)?->bootAddon();
+
+        // Core discovers src/Tags from its booted callback, which Testbench
+        // never fires; register the tag the way that discovery would.
+        Courses::register();
 
         $this->artisan('courses:install')->run();
     }
@@ -49,6 +54,20 @@ abstract class TestCase extends AddonTestCase
             \Goldnead\IdentityContracts\ServiceProvider::class,
             \Goldnead\Entitlements\ServiceProvider::class,
         ];
+    }
+
+    /**
+     * The action routes as a real site mounts them: /!/courses/…, inside the
+     * `web` group, named statamic.courses.*. Statamic pushes addon routes from
+     * its booted callback, which runs after Testbench has loaded routes, so the
+     * bed mounts the same file itself.
+     */
+    protected function defineRoutes($router): void
+    {
+        $router->middleware('web')
+            ->name('statamic.')
+            ->prefix('!/courses')
+            ->group(__DIR__.'/../routes/actions.php');
     }
 
     protected function defineEnvironment($app): void
