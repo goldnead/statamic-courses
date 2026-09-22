@@ -140,10 +140,39 @@ class CourseProgress
         }
 
         $lessons = $this->courses->lessonsFor($course['id']);
+        $userIds = collect($userIds)->map(fn ($id): string => (string) $id)->unique()->values();
+
+        // One query for every learner's states and one for their enrollments,
+        // however many learners there are. Chunked so a large course stays
+        // under the database's bound-parameter limit.
+        $states = collect();
+        $enrollments = collect();
+
+        foreach ($userIds->chunk(500) as $chunk) {
+            if ($lessons->isNotEmpty()) {
+                $states = $states->concat(LessonState::query()
+                    ->whereIn('user_id', $chunk->all())
+                    ->whereIn('lesson_entry_id', $lessons->pluck('id')->all())
+                    ->get());
+            }
+
+            if ($course['drip_mode'] === 'schedule') {
+                $enrollments = $enrollments->concat(Enrollment::query()
+                    ->where('course_entry_id', $course['id'])
+                    ->whereIn('user_id', $chunk->all())
+                    ->get());
+            }
+        }
+
+        $statesByUser = $states->groupBy('user_id');
+        $enrollmentByUser = $enrollments->keyBy('user_id');
         $summaries = [];
 
         foreach ($userIds as $userId) {
-            $summaries[(string) $userId] = $this->summaryFromContext($this->contextFor((string) $userId, $course, $lessons));
+            $summaries[$userId] = $this->summaryFromContext($this->contextFor($userId, $course, $lessons, [
+                'states' => collect($statesByUser->get($userId, []))->keyBy('lesson_entry_id'),
+                'enrollment' => $enrollmentByUser->get($userId),
+            ]));
         }
 
         return $summaries;
@@ -467,17 +496,21 @@ class CourseProgress
 
     /**
      * @param  array<string, mixed>  $course
+     * @param  Collection<int, array<string, mixed>>|null  $lessons
+     * @param  array{states: Collection<string, LessonState>, enrollment: Enrollment|null}|null  $preloaded  what a report already loaded for many learners at once
      * @return array{user_id: string, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}
      */
-    protected function contextFor(string $userId, array $course, ?Collection $lessons = null): array
+    protected function contextFor(string $userId, array $course, ?Collection $lessons = null, ?array $preloaded = null): array
     {
         $lessons ??= $this->courses->lessonsFor($course['id']);
 
-        $states = $lessons->isEmpty() ? collect() : LessonState::query()
-            ->where('user_id', $userId)
-            ->whereIn('lesson_entry_id', $lessons->pluck('id')->all())
-            ->get()
-            ->keyBy('lesson_entry_id');
+        $states = $preloaded !== null
+            ? $preloaded['states']
+            : ($lessons->isEmpty() ? collect() : LessonState::query()
+                ->where('user_id', $userId)
+                ->whereIn('lesson_entry_id', $lessons->pluck('id')->all())
+                ->get()
+                ->keyBy('lesson_entry_id'));
 
         $progress = $this->locks->applyMilestoneAutoCompletion(
             $lessons,
@@ -486,9 +519,11 @@ class CourseProgress
             ])->all(),
         );
 
-        $enrollment = $course['drip_mode'] === 'schedule'
-            ? Enrollment::query()->where('user_id', $userId)->where('course_entry_id', $course['id'])->first()
-            : null;
+        $enrollment = match (true) {
+            $course['drip_mode'] !== 'schedule' => null,
+            $preloaded !== null => $preloaded['enrollment'],
+            default => Enrollment::query()->where('user_id', $userId)->where('course_entry_id', $course['id'])->first(),
+        };
 
         return [
             'user_id' => $userId,

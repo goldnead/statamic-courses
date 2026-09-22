@@ -3,6 +3,7 @@
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Support\ProgressReport;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use Statamic\Facades\Permission;
@@ -60,6 +61,31 @@ it('reports learners, completion rate and stuck learners per course', function (
     ])
         ->and(Carbon::parse($rows['cvt-101']['last_activity_at'])->utc()->toDateTimeString())->toBe('2026-09-22 12:00:00')
         ->and($rows['choir'])->toMatchArray(['learners' => 0, 'completion_rate' => 0, 'last_activity_at' => null]);
+});
+
+it('does not query once per learner', function () {
+    $drip = $this->makeCourse('drip', ['title' => 'Drip', 'drip_mode' => 'schedule']);
+    $this->makeLesson($drip, 'w1', ['item_type' => 'text', 'week' => 1]);
+
+    $queriesFor = function (int $learners): int {
+        foreach (range(1, $learners) as $i) {
+            Courses::enroll("q-{$learners}-{$i}", 'drip');
+            Courses::acknowledgeLesson("q-{$learners}-{$i}", 'drip', 'w1');
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(ProgressReport::class)->overview();
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $count;
+    };
+
+    $withTwo = $queriesFor(2);
+    $withTen = $queriesFor(8); // 2 + 8 = 10 learners on the drip course
+
+    expect($withTen)->toBe($withTwo);
 });
 
 it('takes the stuck threshold from config', function () {

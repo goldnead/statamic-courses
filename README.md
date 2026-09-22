@@ -73,6 +73,9 @@ Courses::updateLessonItem($user, 'cvt-101', 'quiz-1', ['attempts' => 1, 'best_sc
 Courses::completeLesson($user, 'cvt-101', 'quiz-1', 'quiz', ['best_score' => 90]);
 ```
 
+`updateLessonProgress()` is for videos only and trusts the entry's `video_duration` over the
+player's; the player's number counts only when the entry has none.
+
 `$user` is a Statamic user, any `Authenticatable`, or an id. Reads never check access; ask
 `canAccess()` first.
 
