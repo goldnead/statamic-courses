@@ -92,10 +92,26 @@ class ProgressController extends Controller
     {
         $target = (string) $request->input('_redirect', '');
 
-        if (str_starts_with($target, '/') && ! str_starts_with($target, '//') && ! str_contains($target, '\\')) {
-            return redirect($target);
+        return $this->isLocalPath($target) ? redirect($target) : redirect()->back();
+    }
+
+    /**
+     * A plain path on this site, and nothing a browser could read as another
+     * host: no `//`, no backslash (browsers treat it as a slash), no control
+     * characters (browsers strip tabs and newlines, which can turn `/\t/x`
+     * into `//x`), and the same checks again after percent-decoding.
+     */
+    protected function isLocalPath(string $target): bool
+    {
+        foreach ([$target, rawurldecode($target)] as $candidate) {
+            if (! str_starts_with($candidate, '/')
+                || str_starts_with($candidate, '//')
+                || str_contains($candidate, '\\')
+                || preg_match('/[\x00-\x1F\x7F]/', $candidate) === 1) {
+                return false;
+            }
         }
 
-        return redirect()->back();
+        return true;
     }
 }

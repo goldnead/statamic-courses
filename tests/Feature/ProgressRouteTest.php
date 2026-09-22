@@ -92,6 +92,43 @@ it('refuses a locked lesson and a quiz ticked by hand', function () {
     $this->postJson($this->url, ['course' => 'cvt-101', 'lesson' => 'quiz', 'action' => 'complete'])->assertStatus(422);
 });
 
+it('refuses to complete a quiz through playback progress', function () {
+    actAs($this->learner);
+    Courses::acknowledgeLesson($this->learner, 'cvt-101', 'basics');
+    Courses::setLessonCompletion($this->learner, 'cvt-101', 'video', true);
+
+    $this->postJson($this->url, [
+        'course' => 'cvt-101', 'lesson' => 'quiz', 'action' => 'progress',
+        'watched_seconds' => 1, 'resume_seconds' => 1, 'video_duration_seconds' => 1,
+    ])->assertStatus(422);
+
+    expect(Courses::lesson($this->learner, 'cvt-101', 'quiz')['progress']['status'])->toBe('not_started');
+});
+
+it('refuses playback progress on lessons that are not videos', function () {
+    actAs($this->learner);
+
+    $this->postJson($this->url, [
+        'course' => 'cvt-101', 'lesson' => 'basics', 'action' => 'progress',
+        'watched_seconds' => 1, 'video_duration_seconds' => 1,
+    ])->assertStatus(422);
+
+    expect(Courses::lesson($this->learner, 'cvt-101', 'basics')['progress']['status'])->toBe('not_started');
+});
+
+it('does not let the client shorten a video it knows the length of', function () {
+    actAs($this->learner);
+    Courses::acknowledgeLesson($this->learner, 'cvt-101', 'basics');
+
+    $this->postJson($this->url, [
+        'course' => 'cvt-101', 'lesson' => 'video', 'action' => 'progress',
+        'watched_seconds' => 10, 'resume_seconds' => 10, 'video_duration_seconds' => 10,
+    ])->assertOk()
+        ->assertJsonPath('lesson.progress.status', 'in_progress')
+        ->assertJsonPath('lesson.progress.video_duration_seconds', 600)
+        ->assertJsonPath('lesson.progress.completion_percent', 1);
+});
+
 it('redirects a form post to a path on this site, never to another host', function () {
     actAs($this->learner);
 
@@ -103,6 +140,22 @@ it('redirects a form post to a path on this site, never to another host', functi
         ->post($this->url, ['course' => 'cvt-101', 'lesson' => 'basics', 'action' => 'acknowledge', '_redirect' => '//evil.test/x'])
         ->assertRedirect('/courses/cvt-101');
 });
+
+it('treats backslash, control-character and encoded tricks as another host', function (string $target) {
+    actAs($this->learner);
+
+    $response = $this->from('/courses/cvt-101')
+        ->post($this->url, ['course' => 'cvt-101', 'lesson' => 'basics', 'action' => 'acknowledge', '_redirect' => $target]);
+
+    $response->assertRedirect('/courses/cvt-101');
+    expect(parse_url($response->headers->get('Location'), PHP_URL_HOST))->toBe('localhost');
+})->with([
+    'backslash' => ['/\evil.com'],
+    'tab' => ["/\t/evil.com"],
+    'encoded slashes' => ['/%2f%2fevil.com'],
+    'encoded backslash' => ['/%5cevil.com'],
+    'newline' => ["/\n/evil.com"],
+]);
 
 it('does not register the route at all when switched off at boot', function () {
     config()->set('courses.routes.enabled', false);
