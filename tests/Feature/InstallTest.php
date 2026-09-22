@@ -1,5 +1,6 @@
 <?php
 
+use Goldnead\Courses\Facades\Courses;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 
@@ -18,8 +19,8 @@ it('routes both collections so courses and lessons have a url', function () {
     $course = $this->makeCourse('cvt-101');
     $this->makeLesson($course, 'intro');
 
-    expect(Goldnead\Courses\Facades\Courses::course('cvt-101')['url'])->toBe('/courses/cvt-101')
-        ->and(Goldnead\Courses\Facades\Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBe('/courses/cvt-101/intro');
+    expect(Courses::course('cvt-101')['url'])->toBe('/courses/cvt-101')
+        ->and(Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBe('/courses/cvt-101/intro');
 });
 
 it('answers a null url, not an exception, for collections without a route', function () {
@@ -28,9 +29,9 @@ it('answers a null url, not an exception, for collections without a route', func
     $course = $this->makeCourse('cvt-101');
     $this->makeLesson($course, 'intro');
 
-    expect(Goldnead\Courses\Facades\Courses::course('cvt-101')['url'])->toBeNull()
-        ->and(Goldnead\Courses\Facades\Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBeNull()
-        ->and(Goldnead\Courses\Facades\Courses::summary('u', 'cvt-101')['continue_lesson']['url'])->toBeNull();
+    expect(Courses::course('cvt-101')['url'])->toBeNull()
+        ->and(Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBeNull()
+        ->and(Courses::summary('u', 'cvt-101')['continue_lesson']['url'])->toBeNull();
 });
 
 it('keeps a blueprint somebody edited unless forced', function () {

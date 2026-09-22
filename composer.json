@@ -27,7 +27,7 @@
         "statamic/cms": "^6.0"
     },
     "require-dev": {
-        "goldnead/statamic-entitlements": "^1.4",
+        "goldnead/statamic-entitlements": "^1.3",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.18",
         "orchestra/testbench": "^10.0|^11.0",
@@ -35,7 +35,10 @@
         "pestphp/pest-plugin-laravel": "^3.0|^4.0|^5.0"
     },
     "suggest": {
-        "goldnead/statamic-entitlements": "Answers who may open a course. Without it, or another CourseAccess binding, every course is closed."
+        "goldnead/statamic-entitlements": "Answers who may open a course (1.3 or later). Without it, or another CourseAccess binding, every course is closed."
+    },
+    "conflict": {
+        "goldnead/statamic-entitlements": "<1.3"
     },
     "autoload": {
         "psr-4": {
