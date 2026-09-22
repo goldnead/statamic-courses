@@ -51,7 +51,9 @@ class ServiceProvider extends AddonServiceProvider
                 $id = $entry->value('course');
                 $id = is_array($id) ? ($id[0] ?? null) : $id;
 
-                return is_string($id) && $id !== '' ? Entry::find($id)?->slug() : null;
+                $course = is_string($id) && $id !== '' ? Entry::find($id) : null;
+
+                return $course instanceof \Statamic\Entries\Entry ? $course->slug() : null;
             },
         );
 
