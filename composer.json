@@ -1,0 +1,96 @@
+{
+    "name": "goldnead/statamic-courses",
+    "description": "Courses for Statamic: modules and lessons as entries, per-lesson state, sequencing and drip, and a progress rollup. Decides what a learner may open next; who may open the course at all is asked of statamic-entitlements.",
+    "type": "statamic-addon",
+    "license": "MIT",
+    "keywords": [
+        "statamic",
+        "statamic-addon",
+        "courses",
+        "lms",
+        "drip",
+        "progress"
+    ],
+    "authors": [
+        {
+            "name": "Adrian Goldner",
+            "email": "info@adriangoldner.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/goldnead/statamic-courses/issues",
+        "source": "https://github.com/goldnead/statamic-courses"
+    },
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^12.40|^13.0",
+        "statamic/cms": "^6.0"
+    },
+    "require-dev": {
+        "goldnead/statamic-entitlements": "^1.4",
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0|^5.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0|^5.0"
+    },
+    "suggest": {
+        "goldnead/statamic-entitlements": "Answers who may open a course. Without it, or another CourseAccess binding, every course is closed."
+    },
+    "autoload": {
+        "psr-4": {
+            "Goldnead\\Courses\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Goldnead\\Courses\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "statamic": {
+            "name": "Courses",
+            "slug": "courses",
+            "description": "Modules, lessons, drip and progress for member courses.",
+            "url": "https://github.com/goldnead/statamic-courses",
+            "developer": "Adrian Goldner",
+            "developer-url": "https://adriangoldner.dev"
+        },
+        "laravel": {
+            "providers": [
+                "Goldnead\\Courses\\ServiceProvider"
+            ],
+            "aliases": {
+                "Courses": "Goldnead\\Courses\\Facades\\Courses"
+            }
+        }
+    },
+    "scripts": {
+        "test": [
+            "@php vendor/bin/pest"
+        ],
+        "test:mysql": [
+            "@php vendor/bin/pest -c phpunit.mysql.xml"
+        ],
+        "lint": [
+            "@php vendor/bin/pint --test"
+        ],
+        "fix": [
+            "@php vendor/bin/pint"
+        ],
+        "analyse": [
+            "@php vendor/bin/phpstan analyse --memory-limit=1G"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "pixelfear/composer-dist-plugin": true,
+            "composer/installers": true,
+            "php-http/discovery": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

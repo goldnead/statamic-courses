@@ -1,0 +1,126 @@
+title: 'Course Lesson'
+tabs:
+  main:
+    display: Main
+    sections:
+      -
+        fields:
+          -
+            handle: title
+            field:
+              type: text
+              required: true
+              validate:
+                - required
+          -
+            handle: course
+            field:
+              type: entries
+              display: Course
+              max_items: 1
+              mode: select
+              collections:
+                - courses
+              required: true
+              validate:
+                - required
+          -
+            handle: item_type
+            field:
+              type: select
+              display: Type
+              default: video
+              instructions: 'Decides how the lesson is completed: a video by watching, text and milestones by acknowledging.'
+              options:
+                video: Video
+                text: Text
+                milestone: Milestone
+          -
+            handle: content
+            field:
+              type: markdown
+              display: Content
+          -
+            handle: video_duration
+            field:
+              type: text
+              display: 'Video duration'
+              instructions: 'mm:ss, hh:mm:ss or seconds. Without it a video cannot complete itself by being watched.'
+          -
+            handle: est_minutes
+            field:
+              type: integer
+              display: 'Estimated minutes'
+      -
+        display: Structure
+        fields:
+          -
+            handle: section_key
+            field:
+              type: text
+              display: 'Section key'
+              width: 33
+          -
+            handle: section_title
+            field:
+              type: text
+              display: 'Section title'
+              width: 33
+          -
+            handle: section_order
+            field:
+              type: integer
+              display: 'Section order'
+              width: 33
+          -
+            handle: sort_order
+            field:
+              type: integer
+              display: 'Position in section'
+              width: 33
+          -
+            handle: phase_key
+            field:
+              type: text
+              display: 'Phase key'
+              instructions: 'Lessons of a later phase stay locked until every earlier phase is completed.'
+              width: 33
+          -
+            handle: phase_title
+            field:
+              type: text
+              display: 'Phase title'
+              width: 33
+          -
+            handle: phase_order
+            field:
+              type: integer
+              display: 'Phase order'
+              width: 33
+          -
+            handle: week
+            field:
+              type: integer
+              display: Week
+              instructions: 'With drip by schedule: the lesson opens in this week after enrollment.'
+              width: 33
+          -
+            handle: prerequisite_lessons
+            field:
+              type: entries
+              display: Prerequisites
+              collections:
+                - course_lessons
+              instructions: 'This lesson opens only after all of these are completed.'
+  sidebar:
+    display: Sidebar
+    sections:
+      -
+        fields:
+          -
+            handle: slug
+            field:
+              type: slug
+              required: true
+              validate:
+                - required

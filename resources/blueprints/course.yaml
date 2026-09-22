@@ -1,0 +1,60 @@
+title: Course
+tabs:
+  main:
+    display: Main
+    sections:
+      -
+        fields:
+          -
+            handle: title
+            field:
+              type: text
+              required: true
+              validate:
+                - required
+          -
+            handle: summary
+            field:
+              type: textarea
+              display: Summary
+      -
+        display: Access and pacing
+        fields:
+          -
+            handle: product
+            field:
+              type: text
+              display: Product
+              instructions: 'The entitlements product that opens this course. Empty means the course slug.'
+          -
+            handle: sequencing_mode
+            field:
+              type: select
+              display: Sequencing
+              default: none
+              options:
+                none: 'No locks'
+                section: 'Section by section'
+                lesson: 'Lesson by lesson'
+          -
+            handle: drip_mode
+            field:
+              type: select
+              display: Drip
+              default: none
+              instructions: 'Schedule: a lesson with a week number opens that many weeks after the learner enrolled.'
+              options:
+                none: 'All at once'
+                schedule: 'By week, from enrollment'
+  sidebar:
+    display: Sidebar
+    sections:
+      -
+        fields:
+          -
+            handle: slug
+            field:
+              type: slug
+              required: true
+              validate:
+                - required
