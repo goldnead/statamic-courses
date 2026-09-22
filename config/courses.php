@@ -44,4 +44,19 @@ return [
 
     'record_events' => true,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Entitlements
+    |--------------------------------------------------------------------------
+    |
+    | The subject type a learner is looked up under when the learner is not an
+    | Eloquent model (a flat-file Statamic user, a bare id). It must match the
+    | type the grants were written with, or every course stays closed.
+    |
+    */
+
+    'entitlements' => [
+        'subject_type' => 'user',
+    ],
+
 ];
