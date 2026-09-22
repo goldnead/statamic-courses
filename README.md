@@ -40,7 +40,7 @@ earlier ones), `is_test_out`, `week` (with schedule drip), `prerequisite_lessons
 |---|---|
 | `video` (default) | watching past `auto_completion_threshold` (90 %), or the learner's own tick |
 | `text`, `milestone`, `coaching`, `exercise` | `acknowledgeLesson()`; a milestone also by itself once its phase is done |
-| `quiz`, `assignment` (`proof_required_types`) | only `completeLesson()`, called by the code that checked the proof |
+| `quiz`, `assignment`, `reflection` (`proof_required_types`) | only `completeLesson()`, called by the code that checked the proof |
 | anything else | the learner's tick or `completeLesson()` |
 
 ## What locks a lesson
@@ -108,8 +108,13 @@ All tags work for the signed-in learner. Without access to the course they rende
 `courses:form` posts to `POST /!/courses/progress` (fields `course`, `lesson`, `action` =
 `complete`, `incomplete`, `acknowledge` or `progress`, plus `watched_seconds` / `resume_seconds`).
 The route needs a signed-in user with access to the course, carries CSRF, answers JSON when asked
-and otherwise redirects back or to a local `_redirect`. A locked lesson or a quiz ticked by hand is
-refused with 422. Switch it off with `COURSES_ROUTES_ENABLED=false`; the form tag then renders
+and otherwise redirects back or to a local `_redirect`. A refusal carries a reason code, as
+`{"error": "…"}` in JSON and as the flashed `courses` error (`{{ get_error:courses }}`) on a form
+post: `no_access` (403), `unknown_course` (404), `unknown_lesson`, `locked`, `proof_required`,
+`not_video`, `not_acknowledgeable` (422). `Courses::refusalReason()` gives the same answer in PHP.
+
+In `courses:lessons`, a lesson a test-out completed has `status: skipped` and `is_skipped: true`;
+its `progress:status` stays `completed`. Switch it off with `COURSES_ROUTES_ENABLED=false`; the form tag then renders
 nothing.
 
 ## Control Panel

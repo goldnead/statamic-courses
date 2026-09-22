@@ -45,11 +45,17 @@ class ProgressController extends Controller
         ]);
 
         if ($courses->course($data['course']) === null) {
-            return $this->fail($request, 404, 'course_not_found');
+            return $this->fail($request, 404, 'unknown_course');
         }
 
         if (! $courses->canAccess($user, $data['course'])) {
             return $this->fail($request, 403, 'no_access');
+        }
+
+        // Asked before the write, so the answer names the rule that holds:
+        // locked, proof_required, not_video, not_acknowledgeable, unknown_lesson.
+        if ($reason = $courses->refusalReason($user, $data['course'], $data['lesson'], $data['action'])) {
+            return $this->fail($request, 422, $reason);
         }
 
         $lesson = match ($data['action']) {
@@ -65,6 +71,7 @@ class ProgressController extends Controller
         };
 
         if ($lesson === null) {
+            // Something changed between the check and the write.
             return $this->fail($request, 422, 'refused');
         }
 
@@ -81,7 +88,11 @@ class ProgressController extends Controller
             return response()->json(['error' => $reason], $status);
         }
 
-        return $this->back($request)->withErrors(['courses' => $reason]);
+        // Both, so a template can read it either way: {{ get_error:courses }}
+        // or {{ session:courses.error }}.
+        return $this->back($request)
+            ->withErrors(['courses' => $reason])
+            ->with('courses.error', $reason);
     }
 
     /**

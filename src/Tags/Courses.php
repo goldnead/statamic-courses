@@ -81,7 +81,9 @@ class Courses extends Tags
 
         return array_map(fn (array $lesson): array => [
             ...$lesson,
-            'status' => $lesson['progress']['status'],
+            // `skipped` for a lesson a test-out completed; progress:status
+            // keeps `completed`, which is what the rollup counts.
+            'status' => $lesson['is_skipped'] ? 'skipped' : $lesson['progress']['status'],
             'completion_percent' => $lesson['progress']['completion_percent'],
         ], $lessons);
     }

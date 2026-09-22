@@ -129,6 +129,40 @@ it('does not let the client shorten a video it knows the length of', function ()
         ->assertJsonPath('lesson.progress.completion_percent', 1);
 });
 
+it('names the reason for every refusal', function (array $post, int $status, string $reason, bool $grant = true) {
+    $learner = $grant ? $this->learner : Learner::query()->create(['email' => 'c@example.test']);
+    actAs($learner);
+
+    $this->postJson($this->url, ['course' => 'cvt-101', ...$post])
+        ->assertStatus($status)
+        ->assertJsonPath('error', $reason);
+})->with([
+    'locked' => [['lesson' => 'video', 'action' => 'complete'], 422, 'locked'],
+    'unknown lesson' => [['lesson' => 'nope', 'action' => 'complete'], 422, 'unknown_lesson'],
+    'no access' => [['lesson' => 'basics', 'action' => 'acknowledge'], 403, 'no_access', false],
+    'not a video' => [['lesson' => 'basics', 'action' => 'progress', 'watched_seconds' => 5], 422, 'not_video'],
+]);
+
+it('names proof_required for a quiz ticked by hand', function () {
+    actAs($this->learner);
+    Courses::acknowledgeLesson($this->learner, 'cvt-101', 'basics');
+    Courses::setLessonCompletion($this->learner, 'cvt-101', 'video', true);
+
+    $this->postJson($this->url, ['course' => 'cvt-101', 'lesson' => 'quiz', 'action' => 'complete'])
+        ->assertStatus(422)
+        ->assertJsonPath('error', 'proof_required');
+});
+
+it('flashes the reason for a form post', function () {
+    actAs($this->learner);
+
+    $this->from('/courses/cvt-101')
+        ->post($this->url, ['course' => 'cvt-101', 'lesson' => 'video', 'action' => 'complete'])
+        ->assertRedirect('/courses/cvt-101')
+        ->assertSessionHasErrors(['courses' => 'locked'])
+        ->assertSessionHas('courses.error', 'locked');
+});
+
 it('redirects a form post to a path on this site, never to another host', function () {
     actAs($this->learner);
 

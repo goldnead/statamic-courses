@@ -394,6 +394,36 @@ class CourseProgress
         return $this->afterWrite([$written], 'item', $context, $lessonSlug);
     }
 
+    /**
+     * Why a write would be refused, as a stable code, or null when it would
+     * not be. For callers that got null back from a write and owe somebody
+     * an explanation (the POST route answers with it).
+     *
+     * `$write` is `complete`/`incomplete` (setLessonCompletion), `acknowledge`,
+     * `progress` (updateLessonProgress) or `item` (completeLesson,
+     * updateLessonItem). Codes: `unknown_course`, `unknown_lesson`, `locked`,
+     * `proof_required`, `not_video`, `not_acknowledgeable`.
+     */
+    public function refusalReason(mixed $user, string $courseSlug, string $lessonSlug, string $write): ?string
+    {
+        $context = $this->context($user, $courseSlug);
+
+        if ($context === null) {
+            return 'unknown_course';
+        }
+
+        $lesson = $context['lessons']->firstWhere('slug', $lessonSlug);
+
+        return match (true) {
+            ! is_array($lesson) => 'unknown_lesson',
+            $context['locks'][$lessonSlug] ?? false => 'locked',
+            in_array($write, ['complete', 'incomplete', 'progress'], true) && $this->needsProof($lesson) => 'proof_required',
+            $write === 'progress' && $lesson['item_type'] !== 'video' => 'not_video',
+            $write === 'acknowledge' && ! in_array($lesson['item_type'], self::ACKNOWLEDGEABLE_TYPES, true) => 'not_acknowledgeable',
+            default => null,
+        };
+    }
+
     // ---------------------------------------------------------------------
 
     /**
@@ -644,6 +674,9 @@ class CourseProgress
             'progress' => $progress,
             'is_locked' => $locked,
             'is_completed' => $progress['status'] === LessonStatus::Completed->value,
+            // Completed by passing a test-out rather than by doing the lesson.
+            'is_skipped' => $progress['status'] === LessonStatus::Completed->value
+                && (bool) ($progress['item_payload']['skipped'] ?? false),
             'lock_reason' => $locked ? $this->locks->reason($context['lessons'], $context['progress'], $lesson, $context['course']['sequencing_mode'], $opensAt) : null,
             'available_at' => $opensAt?->toIso8601String(),
         ];
@@ -674,7 +707,7 @@ class CourseProgress
      */
     protected function needsProof(array $lesson): bool
     {
-        $types = config('courses.proof_required_types', ['quiz', 'assignment']);
+        $types = config('courses.proof_required_types', ['quiz', 'assignment', 'reflection']);
 
         return is_array($types) && in_array($lesson['item_type'], $types, true);
     }

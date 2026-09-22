@@ -84,6 +84,19 @@ it('names the prerequisite as the reason when that is what holds', function () {
         ->toBe('effects=prerequisite');
 });
 
+it('shows lessons a test-out skipped with the status skipped', function () {
+    signIn($this->learner);
+    $course = Entry::query()->where('collection', 'courses')->where('slug', 'cvt-101')->first();
+    $course->set('sequencing_mode', 'none')->save();
+    $this->makeLesson($course->id(), 'p1', ['sort_order' => 10, 'item_type' => 'text', 'phase_order' => 1]);
+    $this->makeLesson($course->id(), 'check', ['sort_order' => 11, 'item_type' => 'quiz', 'phase_order' => 2, 'is_test_out' => true]);
+
+    Courses::completeLesson($this->learner, 'cvt-101', 'check', 'quiz');
+
+    expect(render('{{ courses:lessons course="cvt-101" }}{{ if slug == "p1" || slug == "check" }}{{ slug }}={{ status }}{{ is_skipped ? "!" : "" }};{{ /if }}{{ /courses:lessons }}'))
+        ->toBe('p1=skipped!;check=completed;');
+});
+
 it('points at the lesson to continue with', function () {
     signIn($this->learner);
     Courses::acknowledgeLesson($this->learner, 'cvt-101', 'basics');

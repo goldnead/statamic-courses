@@ -38,6 +38,23 @@ it('refuses a manual tick on lessons that need their own proof', function () {
         ->and(Courses::lesson('u', 'lernpfad', 'task')['progress']['status'])->toBe('not_started');
 });
 
+it('treats a reflection as needing its own proof by default', function () {
+    expect(Courses::setLessonCompletion('u', 'lernpfad', 'reflect', true))->toBeNull()
+        ->and(Courses::completeLesson('u', 'lernpfad', 'reflect', 'reflection', ['text' => 'ok'])['progress']['status'])->toBe('completed');
+});
+
+it('marks lessons a test-out skipped, so a template can tell them apart', function () {
+    Courses::acknowledgeLesson('u', 'lernpfad', 'reading');
+    Courses::completeLesson('u', 'lernpfad', 'test-out', 'quiz');
+
+    $lessons = collect(Courses::lessons('u', 'lernpfad'))->keyBy('slug');
+
+    expect($lessons['video']['is_skipped'])->toBeTrue()
+        ->and($lessons['reading']['is_skipped'])->toBeFalse()
+        ->and($lessons['test-out']['is_skipped'])->toBeFalse()
+        ->and($lessons['video']['is_completed'])->toBeTrue();
+});
+
 it('takes the proof-required list from config', function () {
     config()->set('courses.proof_required_types', []);
     Courses::completeLesson('u', 'lernpfad', 'test-out', 'quiz');

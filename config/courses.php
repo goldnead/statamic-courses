@@ -43,7 +43,7 @@ return [
     |
     */
 
-    'proof_required_types' => ['quiz', 'assignment'],
+    'proof_required_types' => ['quiz', 'assignment', 'reflection'],
 
     /*
     |--------------------------------------------------------------------------
