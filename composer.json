@@ -54,6 +54,7 @@
         "statamic": {
             "name": "Courses",
             "slug": "courses",
+            "editions": ["pro"],
             "description": "Modules, lessons, drip and progress for member courses.",
             "url": "https://github.com/goldnead/statamic-courses",
             "developer": "Adrian Goldner",
