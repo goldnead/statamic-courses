@@ -1,0 +1,15 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 5
+
+    paths:
+        - src
+        - database
+        - config
+
+    # entitlements is a `suggest`. It sits in require-dev, so the access
+    # bridge is analysed against the real classes.
+
+    treatPhpDocTypesAsCertain: false

@@ -3,8 +3,9 @@
 namespace Goldnead\Courses\Support;
 
 use Illuminate\Support\Collection;
-use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
+use Statamic\Query\Builder;
 
 /**
  * Reads a course and its lessons out of the two collections and flattens them
@@ -39,18 +40,18 @@ class CourseRepository
      */
     public function findCourse(string $slug): ?array
     {
-        $entry = Entry::query()
+        $entry = $this->entries()
             ->where('collection', $this->coursesCollection())
             ->where('slug', $slug)
             ->first();
 
-        return $entry instanceof EntryContract ? $this->normalizeCourse($entry) : null;
+        return $entry instanceof StatamicEntry ? $this->normalizeCourse($entry) : null;
     }
 
     /**
      * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string}
      */
-    public function normalizeCourse(EntryContract $entry): array
+    public function normalizeCourse(StatamicEntry $entry): array
     {
         $product = trim((string) ($entry->get('product') ?? ''));
 
@@ -75,16 +76,16 @@ class CourseRepository
      */
     public function lessonsFor(string $courseId): Collection
     {
-        $entries = Entry::query()
+        $entries = $this->entries()
             ->where('collection', $this->lessonsCollection())
             ->get()
-            ->filter(fn ($entry): bool => $entry instanceof EntryContract && $this->courseIdOf($entry) === $courseId)
+            ->filter(fn ($entry): bool => $entry instanceof StatamicEntry && $this->courseIdOf($entry) === $courseId)
             ->values();
 
-        $slugById = $entries->mapWithKeys(fn (EntryContract $entry): array => [(string) $entry->id() => (string) $entry->slug()]);
+        $slugById = $entries->mapWithKeys(fn (StatamicEntry $entry): array => [(string) $entry->id() => (string) $entry->slug()]);
 
         return $entries
-            ->map(fn (EntryContract $entry): array => $this->normalizeLesson($entry, $slugById))
+            ->map(fn (StatamicEntry $entry): array => $this->normalizeLesson($entry, $slugById))
             ->sortBy([
                 ['section_order', 'asc'],
                 ['sort_order', 'asc'],
@@ -96,7 +97,7 @@ class CourseRepository
      * @param  Collection<string, string>  $slugById
      * @return array<string, mixed>
      */
-    protected function normalizeLesson(EntryContract $entry, Collection $slugById): array
+    protected function normalizeLesson(StatamicEntry $entry, Collection $slugById): array
     {
         $prerequisiteSlugs = collect($this->ids($entry->get('prerequisite_lessons')))
             ->map(fn (string $id): ?string => $slugById->get($id))
@@ -152,7 +153,22 @@ class CourseRepository
         return ctype_digit($value) ? (int) $value : null;
     }
 
-    protected function courseIdOf(EntryContract $lesson): ?string
+    /**
+     * The entry query builder. The facade's contract declares no methods, so
+     * the concrete builder is named here for static analysis; at runtime it is
+     * whatever driver the site uses (Stache or Eloquent).
+     *
+     * @return Builder
+     */
+    protected function entries(): mixed
+    {
+        /** @var Builder $query */
+        $query = Entry::query();
+
+        return $query;
+    }
+
+    protected function courseIdOf(StatamicEntry $lesson): ?string
     {
         return $this->ids($lesson->value('course'))[0] ?? null;
     }

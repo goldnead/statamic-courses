@@ -2,7 +2,7 @@
     "name": "goldnead/statamic-courses",
     "description": "Courses for Statamic: modules and lessons as entries, per-lesson state, sequencing and drip, and a progress rollup. Decides what a learner may open next; who may open the course at all is asked of statamic-entitlements.",
     "type": "statamic-addon",
-    "license": "MIT",
+    "license": "proprietary",
     "keywords": [
         "statamic",
         "statamic-addon",

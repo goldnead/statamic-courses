@@ -1,0 +1,14 @@
+# Everything a site installing this package does not need.
+
+/.github            export-ignore
+/tests              export-ignore
+/docs               export-ignore
+/.gitattributes     export-ignore
+/.gitignore         export-ignore
+/phpunit.xml        export-ignore
+/phpunit.mysql.xml  export-ignore
+/pint.json          export-ignore
+/phpstan.neon       export-ignore
+
+# Deliberately kept: /config, /database, /resources, /src, README.md,
+# CHANGELOG.md, LICENSE.md.

@@ -1,0 +1,140 @@
+# From statamic-addon-studio/templates/workflows/tests.yml, adjusted:
+#   - Laravel ^12.40 / ^13.0 instead of ^11 / ^12: Statamic 6 cannot be
+#     installed next to Laravel 11, so that cell could never resolve.
+#   - a MySQL job, as in statamic-entitlements: the unique indexes on lesson
+#     states, event dedupe keys and enrollments are only tested on a real engine.
+#   - no assets job: this addon ships no Control Panel bundle (yet).
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+        laravel: ['^12.40', '^13.0']
+        stability: [prefer-lowest, prefer-stable]
+        exclude:
+          # Laravel 13 requires PHP ^8.3.
+          - php: '8.2'
+            laravel: '^13.0'
+
+    name: PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }} · ${{ matrix.stability }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, pdo_sqlite, sqlite3, intl, fileinfo
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:${{ matrix.laravel }}" --no-interaction --no-update
+          composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+
+      - name: Run tests
+        run: vendor/bin/pest --colors=always
+
+  mysql:
+    name: MySQL
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: courses_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, pdo_mysql, intl, fileinfo
+          coverage: none
+
+      - run: composer update --prefer-dist --no-progress --no-interaction
+
+      - name: Run the identical suite against MySQL
+        env:
+          DB_DRIVER: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_DATABASE: courses_test
+          DB_USERNAME: root
+          DB_PASSWORD: ''
+        run: vendor/bin/pest -c phpunit.mysql.xml --colors=always
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Code style
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - run: composer update --prefer-dist --no-interaction
+
+      # Check, never fix.
+      - run: vendor/bin/pint --test
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  standards:
+    runs-on: ubuntu-latest
+    name: Addon standards
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: addon
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: goldnead/statamic-addon-studio
+          path: studio
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Run addon-lint
+        run: php studio/tools/addon-lint/bin/addon-lint addon --no-color --fail-on=major -v

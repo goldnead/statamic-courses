@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    The identical suite against a real MySQL server. SQLite has no InnoDB key
+    length limit and no utf8mb4 byte arithmetic, so a green SQLite run says
+    nothing about whether the unique indexes on lesson states, event dedupe keys
+    and enrollments build.
+
+    DB_DRIVER=mysql DB_DATABASE=courses_test vendor/bin/pest -c phpunit.mysql.xml
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_TIMEZONE" value="America/Chicago"/>
+        <env name="DB_CONNECTION" value="testing"/>
+        <env name="DB_DRIVER" value="mysql"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="BRAND_CONTEXT_MULTI_BRAND" value="false"/>
+    </php>
+</phpunit>

@@ -138,7 +138,7 @@ class LockResolver
     public function openWeek(?Enrollment $enrollment, ?CarbonInterface $now = null): int
     {
         if (! $enrollment instanceof Enrollment || $enrollment->started_at === null) {
-            return max(1, (int) ($enrollment?->current_week ?? 1));
+            return max(1, (int) ($enrollment->current_week ?? 1));
         }
 
         $now ??= now();
