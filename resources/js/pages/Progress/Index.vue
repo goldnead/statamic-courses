@@ -24,7 +24,7 @@ const props = defineProps({
     stuckHelp: { type: String, default: '' },
 });
 
-const docsUrl = 'https://github.com/goldnead/statamic-courses#readme';
+const docsUrl = 'https://docs.adriangoldner.dev/courses/';
 
 function reload() {
     router.reload();
