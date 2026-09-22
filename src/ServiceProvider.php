@@ -6,6 +6,8 @@ use Goldnead\Courses\Access\ClosedCourseAccess;
 use Goldnead\Courses\Access\EntitlementsCourseAccess;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Entitlements\EntitlementManager;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Providers\AddonServiceProvider;
 
 class ServiceProvider extends AddonServiceProvider
@@ -32,7 +34,28 @@ class ServiceProvider extends AddonServiceProvider
     {
         $this->bootMigrations()
             ->bootCommands()
+            ->bootComputedValues()
             ->bootPublishables();
+    }
+
+    /**
+     * `course_slug` on every lesson, for the lesson route
+     * `/courses/{course_slug}/{slug}` that courses:install writes.
+     */
+    protected function bootComputedValues(): self
+    {
+        Collection::computed(
+            (string) config('courses.collections.lessons', 'course_lessons'),
+            'course_slug',
+            function ($entry): ?string {
+                $id = $entry->value('course');
+                $id = is_array($id) ? ($id[0] ?? null) : $id;
+
+                return is_string($id) && $id !== '' ? Entry::find($id)?->slug() : null;
+            },
+        );
+
+        return $this;
     }
 
     protected function bootMigrations(): self

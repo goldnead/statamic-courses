@@ -25,8 +25,13 @@ class Install extends Command
         $courses = (string) config('courses.collections.courses', 'courses');
         $lessons = (string) config('courses.collections.lessons', 'course_lessons');
 
-        $this->ensureCollection($courses, 'Courses');
-        $this->ensureCollection($lessons, 'Course Lessons');
+        // A lesson's url nests under its course through `course_slug`, a
+        // computed value the service provider registers: route data holds raw
+        // field values, so `course:slug` would find an id, not an entry. A site
+        // that serves lessons elsewhere (or not at all) changes or clears the
+        // route; urls are then null and nothing in this package breaks.
+        $this->ensureCollection($courses, 'Courses', '/courses/{slug}');
+        $this->ensureCollection($lessons, 'Course Lessons', '/courses/{course_slug}/{slug}');
 
         $this->ensureBlueprint($courses, 'course', $courses, $lessons);
         $this->ensureBlueprint($lessons, 'course_lesson', $courses, $lessons);
@@ -36,7 +41,7 @@ class Install extends Command
         return self::SUCCESS;
     }
 
-    protected function ensureCollection(string $handle, string $title): void
+    protected function ensureCollection(string $handle, string $title, string $route): void
     {
         if (Collection::find($handle)) {
             $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'exists, kept');
@@ -44,7 +49,7 @@ class Install extends Command
             return;
         }
 
-        Collection::make($handle)->title($title)->save();
+        Collection::make($handle)->title($title)->routes($route)->save();
 
         $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'created');
     }

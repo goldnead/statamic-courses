@@ -13,3 +13,10 @@ parameters:
     # bridge is analysed against the real classes.
 
     treatPhpDocTypesAsCertain: false
+
+    # Larastan only knows the host app's config directory; this is the
+    # package's own, where env() is exactly right.
+    ignoreErrors:
+        -
+            identifier: larastan.noEnvCallsOutsideOfConfig
+            path: config/courses.php

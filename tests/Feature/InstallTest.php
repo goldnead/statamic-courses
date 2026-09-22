@@ -14,6 +14,25 @@ it('creates both collections with their blueprints', function () {
         ->and(Blueprint::find('collections.courses.course')->hasField('drip_mode'))->toBeTrue();
 });
 
+it('routes both collections so courses and lessons have a url', function () {
+    $course = $this->makeCourse('cvt-101');
+    $this->makeLesson($course, 'intro');
+
+    expect(Goldnead\Courses\Facades\Courses::course('cvt-101')['url'])->toBe('/courses/cvt-101')
+        ->and(Goldnead\Courses\Facades\Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBe('/courses/cvt-101/intro');
+});
+
+it('answers a null url, not an exception, for collections without a route', function () {
+    Collection::find('courses')->routes(null)->save();
+    Collection::find('course_lessons')->routes(null)->save();
+    $course = $this->makeCourse('cvt-101');
+    $this->makeLesson($course, 'intro');
+
+    expect(Goldnead\Courses\Facades\Courses::course('cvt-101')['url'])->toBeNull()
+        ->and(Goldnead\Courses\Facades\Courses::lesson('u', 'cvt-101', 'intro')['url'])->toBeNull()
+        ->and(Goldnead\Courses\Facades\Courses::summary('u', 'cvt-101')['continue_lesson']['url'])->toBeNull();
+});
+
 it('keeps a blueprint somebody edited unless forced', function () {
     $blueprint = Blueprint::find('collections.courses.course');
     $blueprint->ensureField('own_field', ['type' => 'text'])->save();
