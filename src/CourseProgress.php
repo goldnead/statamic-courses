@@ -206,7 +206,9 @@ class CourseProgress
     {
         [$context, $lesson] = $this->writable($user, $courseSlug, $lessonSlug);
 
-        if ($lesson === null) {
+        // Only a video has playback. Anything else, and above all a quiz or an
+        // assignment, would otherwise complete itself from two client numbers.
+        if ($lesson === null || $lesson['item_type'] !== 'video' || $this->needsProof($lesson)) {
             return null;
         }
 
@@ -680,9 +682,12 @@ class CourseProgress
      */
     protected function durationFor(array $lesson, LessonState $state, array $payload): ?int
     {
-        $duration = $payload['video_duration_seconds']
-            ?? $state->video_duration_seconds
-            ?? ($lesson['video_duration_seconds'] ?? null);
+        // The entry's duration wins: a client that claims a ten-minute video is
+        // ten seconds long must not complete it in ten seconds. The player's
+        // number only counts when the entry does not know.
+        $duration = ($lesson['video_duration_seconds'] ?? null)
+            ?? $payload['video_duration_seconds']
+            ?? $state->video_duration_seconds;
 
         return is_numeric($duration) ? max(1, (int) $duration) : null;
     }
