@@ -7,6 +7,11 @@ form route for the front end, and a "Course Progress" screen in the Control Pane
 
 Commercial, single edition (`pro`).
 
+<p>
+  <img src="screenshots/progress.png" width="49%" alt="Course progress in the Control Panel" />
+  <img src="screenshots/lessons.png" width="49%" alt="Lessons with lock states on the front end" />
+</p>
+
 ## Requirements
 
 - PHP 8.2+, Laravel 12.40+ or 13, Statamic 6
