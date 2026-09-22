@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A21CAF"/>
+      <stop offset="1" stop-color="#3B0764"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#3B0764" flood-opacity="0.34"/>
+    </filter>
+  </defs>
+
+  <!-- rounded square background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- An open book, because the Control Panel already shows this addon as
+       `content-book-open`, and the icon should be the same thing a user meets
+       in the nav. What makes it a course and not a reference manual is the
+       right page: one lesson ticked off. Progress per lesson is the whole
+       addon; a book alone would have said "documentation".
+
+       Plum, because the suite's greens (Assessments, Consent, Events,
+       Activity) and blues (Entitlements, Inline Edit, Invoices) are taken, and
+       Courses sits next to both Assessments and Entitlements in the docs grid. -->
+  <g filter="url(#sh)">
+    <path d="M244 150 C204 126 150 118 92 126 L92 372 C150 364 204 372 244 396 Z" fill="#FFFFFF"/>
+    <path d="M268 150 C308 126 362 118 420 126 L420 372 C362 364 308 372 268 396 Z" fill="#FFFFFF"/>
+  </g>
+
+  <!-- the text on the left page -->
+  <rect x="124" y="176" width="92" height="22" rx="11" fill="url(#bg)"/>
+  <rect x="124" y="226" width="92" height="22" rx="11" fill="url(#bg)"/>
+  <rect x="124" y="276" width="64" height="22" rx="11" fill="url(#bg)"/>
+
+  <!-- the completed lesson on the right page. Thick on purpose: at 24 pixels
+       the tick is the only thing that says "progress". -->
+  <path d="M296 262 L331 297 L392 222" stroke="url(#bg)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

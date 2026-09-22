@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    background: radial-gradient(1200px 700px at 78% 22%, #5B0F63 0%, #2E0540 55%, #0D0213 100%);
+    color: #fff; overflow: hidden; position: relative;
+  }
+  .wrap { display: flex; height: 100%; align-items: center; padding: 0 92px; gap: 64px; }
+  .copy { max-width: 660px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 22px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+    color: #F0C8F5; margin-bottom: 26px;
+  }
+  .eyebrow .dot { width: 12px; height: 12px; border-radius: 50%; background: #C94FD6; box-shadow: 0 0 18px #C94FD6; }
+  h1 { font-size: 76px; line-height: 1.02; font-weight: 800; letter-spacing: -.02em; }
+  h1 .accent { background: linear-gradient(90deg,#F0C8F5,#DE93E8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p.sub { margin-top: 28px; font-size: 30px; line-height: 1.35; color: #E6D6E9; font-weight: 400; }
+  .badges { margin-top: 40px; display: flex; gap: 14px; }
+  .badge { font-size: 22px; font-weight: 600; padding: 12px 22px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16); color: #F0C8F5; white-space: nowrap; }
+  .art { flex: 1; display: flex; align-items: center; justify-content: center; }
+  .glyph { width: 360px; height: 360px; filter: drop-shadow(0 30px 60px rgba(0,0,0,.45)); }
+  .corner { position: absolute; right: -120px; bottom: -160px; width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #A21CAF47, transparent 60%); }
+</style>
+</head>
+<body>
+  <div class="corner"></div>
+  <div class="wrap">
+    <div class="copy">
+      <span class="eyebrow"><span class="dot"></span>Statamic Addon</span>
+      <h1>Statamic<br><span class="accent">Courses</span></h1>
+      <p class="sub">Lessons as entries, progress per learner, drip and locks.</p>
+      <div class="badges">
+        <span class="badge">Progress rollup</span>
+        <span class="badge">Drip by week</span>
+        <span class="badge">Entitlements</span>
+      </div>
+    </div>
+    <div class="art">
+      <svg class="glyph" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#A21CAF"/><stop offset="1" stop-color="#3B0764"/>
+          </linearGradient>
+          <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#3B0764" flood-opacity="0.34"/>
+          </filter>
+        </defs>
+        <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+        <!-- an open book with one lesson ticked off, see icon.svg -->
+        <g filter="url(#sh)">
+          <path d="M244 150 C204 126 150 118 92 126 L92 372 C150 364 204 372 244 396 Z" fill="#FFFFFF"/>
+          <path d="M268 150 C308 126 362 118 420 126 L420 372 C362 364 308 372 268 396 Z" fill="#FFFFFF"/>
+        </g>
+        <rect x="124" y="176" width="92" height="22" rx="11" fill="url(#bg)"/>
+        <rect x="124" y="226" width="92" height="22" rx="11" fill="url(#bg)"/>
+        <rect x="124" y="276" width="64" height="22" rx="11" fill="url(#bg)"/>
+        <path d="M296 262 L331 297 L392 222" stroke="url(#bg)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>
