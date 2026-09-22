@@ -8,4 +8,4 @@ composer.lock
 
 # Written by `npm run dev`. Committing it points every installing site's Control
 # Panel at a dev server that does not exist, so it loads no addon assets at all.
-/resources/dist/hot
+/dist/hot

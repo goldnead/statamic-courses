@@ -3,7 +3,7 @@
 #     installed next to Laravel 11, so that cell could never resolve.
 #   - a MySQL job, as in statamic-entitlements: the unique indexes on lesson
 #     states, event dedupe keys and enrollments are only tested on a real engine.
-#   - no assets job: this addon ships no Control Panel bundle (yet).
+#   - the assets job checks resources/js against the committed dist/.
 
 name: Tests
 
@@ -138,3 +138,34 @@ jobs:
 
       - name: Run addon-lint
         run: php studio/tools/addon-lint/bin/addon-lint addon --no-color --fail-on=major -v
+
+  assets:
+    runs-on: ubuntu-latest
+    name: Built assets are current
+
+    # dist/ is committed because consumers install with Composer and have no
+    # Node toolchain. Without this job a source change ships green while the
+    # Control Panel keeps loading the old bundle.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # @statamic/cms resolves from vendor/, so Composer must run first.
+      - run: composer update --prefer-dist --no-interaction
+
+      - run: npm ci --ignore-scripts
+
+      - run: npm run build
+
+      - name: Fail if the committed bundle is stale
+        run: git diff --exit-code -- dist

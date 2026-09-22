@@ -9,6 +9,11 @@
 /phpunit.mysql.xml  export-ignore
 /pint.json          export-ignore
 /phpstan.neon       export-ignore
+/package.json       export-ignore
+/package-lock.json  export-ignore
+/vite.config.js     export-ignore
+/resources/js       export-ignore
 
-# Deliberately kept: /config, /database, /resources, /src, README.md,
+# Deliberately kept: /dist (the built CP bundle), /config, /database,
+# /resources/blueprints, /resources/lang, /routes, /src, README.md,
 # CHANGELOG.md, LICENSE.md.

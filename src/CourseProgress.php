@@ -125,6 +125,31 @@ class CourseProgress
     }
 
     /**
+     * The rollup for many learners of one course, reading the course and its
+     * lessons once. Keyed by learner id. For reports, not for requests.
+     *
+     * @param  iterable<string>  $userIds
+     * @return array<string, array<string, mixed>>
+     */
+    public function summaries(string $courseSlug, iterable $userIds): array
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        if ($course === null) {
+            return [];
+        }
+
+        $lessons = $this->courses->lessonsFor($course['id']);
+        $summaries = [];
+
+        foreach ($userIds as $userId) {
+            $summaries[(string) $userId] = $this->summaryFromContext($this->contextFor((string) $userId, $course, $lessons));
+        }
+
+        return $summaries;
+    }
+
+    /**
      * @return array<string, mixed>|null
      */
     public function summary(mixed $user, string $courseSlug): ?array
@@ -442,9 +467,9 @@ class CourseProgress
      * @param  array<string, mixed>  $course
      * @return array{user_id: string, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}
      */
-    protected function contextFor(string $userId, array $course): array
+    protected function contextFor(string $userId, array $course, ?Collection $lessons = null): array
     {
-        $lessons = $this->courses->lessonsFor($course['id']);
+        $lessons ??= $this->courses->lessonsFor($course['id']);
 
         $states = $lessons->isEmpty() ? collect() : LessonState::query()
             ->where('user_id', $userId)

@@ -6,6 +6,7 @@ use Goldnead\Courses\ServiceProvider;
 use Goldnead\Courses\Tags\Courses;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Statamic\Facades\CP\Nav;
 use Statamic\Facades\Entry;
 use Statamic\Testing\AddonTestCase;
 use Statamic\Testing\Concerns\PreventsSavingStacheItemsToDisk;
@@ -17,9 +18,18 @@ abstract class TestCase extends AddonTestCase
 
     protected string $addonServiceProvider = ServiceProvider::class;
 
+    /** @var list<callable> Nav::extend() callbacks bootAddon() registered. */
+    protected array $navCallbacks = [];
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        // AddonTestCase swaps Nav for a strict mock; let bootAddon() extend it
+        // and keep the callback, so a test can run it against a real builder.
+        Nav::shouldReceive('extend')->andReturnUsing(function ($callback) {
+            $this->navCallbacks[] = $callback;
+        });
 
         $this->app->getProvider(ServiceProvider::class)?->bootAddon();
 
@@ -68,6 +78,13 @@ abstract class TestCase extends AddonTestCase
             ->name('statamic.')
             ->prefix('!/courses')
             ->group(__DIR__.'/../routes/actions.php');
+
+        // Inside core's authenticated CP group, as Statamic mounts it, so an
+        // anonymous request is redirected by core, not refused by the controller.
+        $router->middleware(['statamic.cp', 'statamic.cp.authenticated'])
+            ->prefix('cp')
+            ->name('statamic.cp.')
+            ->group(__DIR__.'/../routes/cp.php');
     }
 
     protected function defineEnvironment($app): void

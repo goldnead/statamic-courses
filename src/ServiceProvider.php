@@ -7,11 +7,32 @@ use Goldnead\Courses\Access\EntitlementsCourseAccess;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Entitlements\EntitlementManager;
 use Statamic\Facades\Collection;
+use Statamic\Facades\CP\Nav;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
 
 class ServiceProvider extends AddonServiceProvider
 {
+    /**
+     * The Control Panel bundle. Statamic 6 reads it from this property only;
+     * the three values must byte-match `laravel()` in vite.config.js.
+     *
+     * Untyped on purpose: the parent declares it without a type.
+     *
+     * @phpstan-ignore-next-line property.defaultValue
+     */
+    protected $vite = [
+        'hotFile' => __DIR__.'/../dist/hot',
+        'publicDirectory' => 'dist',
+        'input' => ['resources/js/cp.js'],
+    ];
+
+    /**
+     * The sibling that owns the shared "Suite" nav section, when installed.
+     */
+    public const SUITE_NAV = '\Goldnead\StatamicPayments\Cp\SuiteNav';
+
     public function register(): void
     {
         parent::register();
@@ -28,6 +49,15 @@ class ServiceProvider extends AddonServiceProvider
         // Bound by class name, never under a short slug: a container key named
         // after the addon is how a sibling once overwrote Laravel's own `events`.
         $this->app->singleton(CourseProgress::class);
+
+        // On the resolving translator rather than in boot: nav and permission
+        // labels are built before bootAddon() runs.
+        $langPath = __DIR__.'/../resources/lang';
+        $this->app->resolving('translator', fn ($translator) => $translator->addNamespace('courses', $langPath));
+
+        if ($this->app->resolved('translator')) {
+            $this->app['translator']->addNamespace('courses', $langPath);
+        }
     }
 
     public function bootAddon(): void
@@ -35,6 +65,8 @@ class ServiceProvider extends AddonServiceProvider
         $this->bootMigrations()
             ->bootCommands()
             ->bootComputedValues()
+            ->bootPermissions()
+            ->bootNavigation()
             ->bootPublishables();
     }
 
@@ -56,6 +88,47 @@ class ServiceProvider extends AddonServiceProvider
                 return $course instanceof \Statamic\Entries\Entry ? $course->slug() : null;
             },
         );
+
+        return $this;
+    }
+
+    /**
+     * One permission: reading who is where in which course. Nothing on the
+     * screen writes, so nothing else needs permitting.
+     */
+    protected function bootPermissions(): self
+    {
+        Permission::extend(function (): void {
+            Permission::group('courses', __('courses::cp.nav'), function (): void {
+                Permission::register('view course progress')
+                    ->label(__('courses::cp.permission_view'));
+            });
+        });
+
+        return $this;
+    }
+
+    /**
+     * Under the suite's shared section when statamic-payments provides one,
+     * under Content otherwise. Guarded by class_exists: payments is not a
+     * dependency, and a missing class must not take the whole nav down.
+     */
+    protected function bootNavigation(): self
+    {
+        if (! config('courses.cp.enabled', true)) {
+            return $this;
+        }
+
+        Nav::extend(function ($nav): void {
+            $suiteNav = self::SUITE_NAV;
+            $section = class_exists($suiteNav) ? $suiteNav::section() : 'Content';
+
+            $nav->create(__('courses::cp.nav'))
+                ->section($section)
+                ->icon('chart-monitoring-indicator')
+                ->route('courses.progress.index')
+                ->can('view course progress');
+        });
 
         return $this;
     }
@@ -85,6 +158,10 @@ class ServiceProvider extends AddonServiceProvider
         $this->publishes([
             __DIR__.'/../database/migrations' => database_path('migrations'),
         ], 'courses-migrations');
+
+        $this->publishes([
+            __DIR__.'/../resources/lang' => lang_path('vendor/courses'),
+        ], 'courses-translations');
 
         return $this;
     }
