@@ -6,6 +6,11 @@ drip by schedule or by progress, and a progress rollup. Access to a course is as
 
 > Phase 1: the domain layer. No Control Panel screens, no Antlers tags, no templates yet.
 
+## Requirements
+
+- PHP 8.2+, Laravel 12.40+ or 13, Statamic 6
+- Optional: goldnead/statamic-entitlements 1.4+ (without it every course is closed)
+
 ## Install
 
 ```bash
@@ -37,7 +42,7 @@ earlier ones), `week` (with schedule drip), `prerequisite_lessons`, `item_type` 
 A completed lesson is never locked. A milestone completes itself once its prerequisites, or all
 other lessons of its phase, are completed. Writes to a locked lesson are refused.
 
-## API
+## Usage
 
 ```php
 use Goldnead\Courses\Facades\Courses;
