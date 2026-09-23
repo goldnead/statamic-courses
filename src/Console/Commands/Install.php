@@ -57,19 +57,11 @@ class Install extends Command
 
     protected function ensureCollection(string $handle, string $title, string $route): void
     {
-        if ($collection = Collection::find($handle)) {
-            // An update may translate a title that is still the English
-            // default; a title somebody chose is theirs.
-            if ($this->option('merge') && $collection->title() !== $title && in_array($collection->title(), ['Courses', 'Course Lessons'], true)) {
-                if (! $this->option('dry-run')) {
-                    $collection->title($title)->save();
-                }
-
-                $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", "title: {$title}");
-
-                return;
-            }
-
+        // An existing collection is never saved again, not even to translate
+        // its title: Statamic rewrites the whole YAML file on save and drops
+        // every setting that equals a default, which a site may have written
+        // out on purpose (found on adriangoldner.com staging, 0.2.0-rc.1).
+        if (Collection::find($handle)) {
             $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'exists, kept');
 
             return;
@@ -77,6 +69,7 @@ class Install extends Command
 
         if ($this->option('dry-run')) {
             $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'would create');
+            $this->wouldWrite(Collection::make($handle)->path());
 
             return;
         }
@@ -109,6 +102,7 @@ class Install extends Command
 
         if ($this->option('dry-run')) {
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", $existing ? 'would overwrite' : 'would create');
+            $this->wouldWrite(($existing ?? Blueprint::make($handle)->setNamespace($namespace))->path());
 
             return;
         }
@@ -187,11 +181,21 @@ class Install extends Command
 
         if ($this->option('dry-run')) {
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'dry run, not saved');
+            $this->wouldWrite($existing->path());
 
             return;
         }
 
         $existing->setContents($contents)->save();
+    }
+
+    /**
+     * On a dry run, every file a real run would write, by path.
+     */
+    protected function wouldWrite(string $path): void
+    {
+        // A plain line: a two-column row shortens a long path to fit.
+        $this->line('  would write '.str_replace(base_path().'/', '', $path));
     }
 
     /**
@@ -389,7 +393,7 @@ class Install extends Command
                 if ($container !== null) {
                     $node['container'] = $container;
                 } else {
-                    $this->components->warn('No asset container: the download block needs one. Create a container, then run courses:install --force.');
+                    $this->components->warn('No asset container: the download block needs one. Create a container, then run courses:install again.');
                 }
             }
 

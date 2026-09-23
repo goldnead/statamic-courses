@@ -160,11 +160,32 @@ describe('--merge', function () {
             ->and($lesson->field('content')->config()['toolbar_mode'])->toBe('floating')
             ->and($course->field('drip_mode')->config()['options'])->toMatchArray(['none' => 'Keine', 'schedule' => 'Nach Wochen', 'days' => 'Nach Tagen ab Einschreibung'])
             ->and($course->hasField('on_payment_failure'))->toBeTrue()
-            ->and(Collection::find('courses')->title())->toBe('Kurse');
+            // Collections are not touched on an update, not even to translate a title.
+            ->and(Collection::find('courses')->title())->toBe('Courses');
 
         // The new block field sits right after the field it follows in the shipped blueprint.
         $handles = collect($lesson->contents()['tabs']['main']['sections'][0]['fields'])->pluck('handle')->all();
         expect(array_search('blocks', $handles))->toBe(array_search('content', $handles) + 1);
+    });
+
+    it('leaves an existing collection file exactly as it is, English title and explicit settings included', function () {
+        $collection = Collection::find('courses')->title('Courses')->revisionsEnabled(false)->sortDirection('asc')->template('course_show');
+        $collection->save();
+        $before = file_get_contents($collection->path());
+
+        config()->set('app.locale', 'de');
+        $this->artisan('courses:install', ['--merge' => true])->assertSuccessful();
+
+        expect(file_get_contents(Collection::find('courses')->path()))->toBe($before)
+            ->and(Collection::find('courses')->title())->toBe('Courses');
+    });
+
+    it('names every file it would write on a dry run, and only those', function () {
+        $this->artisan('courses:install', ['--merge' => true, '--dry-run' => true])
+            // One expectation per line: a written line satisfies only one.
+            ->expectsOutputToContain('would write '.str_replace(base_path().'/', '', Blueprint::find('collections.course_lessons.course_lesson')->path()))
+            ->doesntExpectOutputToContain('collections/courses.yaml')
+            ->assertSuccessful();
     });
 
     it('says what it would add and saves nothing on a dry run', function () {

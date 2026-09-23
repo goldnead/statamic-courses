@@ -24,7 +24,8 @@
   `canAccess()`, so team members and bundle holders get the file. YouTube and Vimeo wait behind
   statamic-consent's gate when it is installed.
 - `courses:install --merge` (with `--dry-run`): adds missing fields and select options to
-  existing blueprints and changes nothing else; translates collection titles still in English.
+  existing blueprints and changes nothing else. `--dry-run` names every file a real run would
+  write.
 - Drip modes `days`, `date`, `day_of_month`, `payments` and `after_trial` (lesson fields
   `drip_after`, `drip_date`; course field `drip_day_of_month`), `Courses::recordBilling()`.
 - Lessons and sections limited to entitlements, user groups, LeadHub tags or LeadHub segments.
@@ -56,6 +57,12 @@
 ### Changed
 - `courses:install` writes an asset container into the download field.
 - A lesson locked by the drip reports its drip reason first, also before the learner enrolled.
+
+### Fixed
+- `courses:install --merge` no longer saves existing collections. It used to translate an
+  English collection title, and saving rewrote the whole collection YAML, dropping settings the
+  site had written out explicitly. Existing collections are now left untouched.
+- `courses:install --dry-run` names every file a real run would write.
 
 ## 0.1.2 (2026-09-23)
 
