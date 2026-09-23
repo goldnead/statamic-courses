@@ -20,3 +20,9 @@ parameters:
         -
             identifier: larastan.noEnvCallsOutsideOfConfig
             path: config/courses.php
+        # Older statamic/cms releases give the parent's $vite a narrower
+        # docblock than the bundle array; newer ones do not. Tolerate both.
+        -
+            identifier: property.defaultValue
+            path: src/ServiceProvider.php
+            reportUnmatched: false
