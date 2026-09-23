@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-09-23)
+
+### Upgrading
+- Run `php artisan migrate`: three migrations (billing, hold and hold-source columns on
+  `courses_enrollments`, table `courses_team_members`).
+- Then `php artisan courses:install --merge` (try `--dry-run` first). It adds the new fields and
+  select options to your existing course and lesson blueprints and changes nothing else, so labels
+  and instructions you or an earlier version wrote stay as they are.
+- If the site caches routes (`php artisan optimize`), rebuild the cache: `POST /!/courses/team`
+  and the Control Panel route for lifting a payment hold are new.
+- Optional: `downloads.container` (`COURSES_DOWNLOADS_CONTAINER`) names the asset container the
+  download block picks files from; without it the site's first container other than the private
+  one is used. Set it before running `--merge`, which writes it into the lesson blueprint.
+- New permission `manage course holds` for lifting payment holds on the Course Progress screen;
+  give it to the roles that should.
 
 ### Added
 - Lesson blocks: text, callout, columns, FAQ, video, download and button, rendered by
@@ -40,8 +54,6 @@
 - Config `downloads.container`.
 
 ### Changed
-- Three migrations: billing, hold and hold-source columns on `courses_enrollments`, table
-  `courses_team_members`. Run `php artisan migrate`, then `courses:install --merge`.
 - `courses:install` writes an asset container into the download field.
 - A lesson locked by the drip reports its drip reason first, also before the learner enrolled.
 
