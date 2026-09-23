@@ -790,6 +790,8 @@ class CourseProgress
     /**
      * The enrollment carries the "already announced" flag, so reopening a
      * lesson and completing it again does not complete the course twice.
+     * The flag is claimed with one conditional UPDATE, so of two concurrent
+     * requests only the one that flips it announces the course.
      *
      * @param  array<string, mixed>  $context
      */
@@ -800,12 +802,14 @@ class CourseProgress
             ['current_week' => 1, 'started_at' => now()],
         );
 
-        if ($enrollment->completed_at !== null) {
+        $claimed = Enrollment::query()
+            ->whereKey($enrollment->getKey())
+            ->whereNull('completed_at')
+            ->update(['completed_at' => now()]);
+
+        if ($claimed !== 1) {
             return;
         }
-
-        $enrollment->completed_at = now();
-        $enrollment->save();
 
         CourseCompleted::dispatch($context['user_id'], $context['course']['id'], $context['course']['slug']);
     }

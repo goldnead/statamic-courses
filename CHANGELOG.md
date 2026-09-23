@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 (2026-09-23)
+
+### Fixed
+- CourseCompleted fires once under concurrent completion.
+
 ## 0.1.1 (2026-09-22)
 
 ### Changed

@@ -1,11 +1,14 @@
 <?php
 
+use Goldnead\Courses\CourseProgress;
 use Goldnead\Courses\Events\CourseCompleted;
 use Goldnead\Courses\Events\LessonCompleted;
 use Goldnead\Courses\Facades\Courses;
+use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonEvent;
 use Goldnead\Courses\Models\LessonState;
 use Illuminate\Support\Facades\Event;
+use Statamic\Facades\Entry;
 use Statamic\Facades\User;
 
 beforeEach(function () {
@@ -104,6 +107,39 @@ it('fires LessonCompleted on the transition and CourseCompleted once', function 
     Courses::setLessonCompletion('u', 'c', 'reading', false);
     Courses::setLessonCompletion('u', 'c', 'reading', true);
     Event::assertDispatchedTimes(LessonCompleted::class, 3);
+    Event::assertDispatchedTimes(CourseCompleted::class, 1);
+});
+
+it('fires CourseCompleted once when a concurrent request completes the course first', function () {
+    Event::fake([LessonCompleted::class, CourseCompleted::class]);
+    Courses::setLessonCompletion('u', 'c', 'video', true);
+    Enrollment::query()->create([
+        'user_id' => 'u',
+        'course_entry_id' => Entry::query()->where('collection', 'courses')->where('slug', 'c')->first()->id(),
+        'current_week' => 1,
+        'started_at' => now(),
+    ]);
+
+    // The other request slips in between this request's read of the
+    // enrollment and its write: it runs the same completion path to the end.
+    $raced = false;
+    Enrollment::retrieved(function (Enrollment $enrollment) use (&$raced) {
+        if ($raced) {
+            return;
+        }
+        $raced = true;
+
+        $progress = app(CourseProgress::class);
+        $complete = new ReflectionMethod($progress, 'markCourseCompleted');
+        $complete->invoke($progress, [
+            'user_id' => $enrollment->user_id,
+            'course' => ['id' => $enrollment->course_entry_id, 'slug' => 'c'],
+        ]);
+    });
+
+    Courses::acknowledgeLesson('u', 'c', 'reading');
+
+    expect($raced)->toBeTrue();
     Event::assertDispatchedTimes(CourseCompleted::class, 1);
 });
 
