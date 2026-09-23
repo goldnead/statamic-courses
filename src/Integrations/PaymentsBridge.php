@@ -55,6 +55,9 @@ class PaymentsBridge
         $this->each($subscription, function (StatamicUser $learner, string $slug) use ($subscription): void {
             $this->courses->enroll($learner, $slug);
             $this->courses->recordBilling($learner, $slug, $this->paymentsOf($subscription), $this->trialUntil($subscription));
+            // A new purchase is paid: whatever an earlier, failed subscription
+            // held back is lifted.
+            $this->courses->paymentRecovered($learner, $slug, null, 'new_purchase');
         });
     }
 
@@ -64,15 +67,46 @@ class PaymentsBridge
 
         $this->each($subscription, function (StatamicUser $learner, string $slug) use ($subscription): void {
             $this->courses->recordBilling($learner, $slug, $this->paymentsOf($subscription));
-            $this->courses->paymentRecovered($learner, $slug);
+            $this->courses->paymentRecovered($learner, $slug, $this->idOf($subscription));
         });
     }
 
     public function cycleFailed(object $event): void
     {
-        $this->each($event->subscription ?? null, function (StatamicUser $learner, string $slug): void {
-            $this->courses->paymentFailed($learner, $slug);
+        $subscription = $event->subscription ?? null;
+
+        $this->each($subscription, function (StatamicUser $learner, string $slug) use ($subscription): void {
+            $this->courses->paymentFailed($learner, $slug, $this->idOf($subscription), $this->grantRefsOf($subscription));
         });
+    }
+
+    protected function idOf(object $subscription): ?string
+    {
+        $id = $subscription->id ?? null;
+
+        return is_scalar($id) && (string) $id !== '' ? (string) $id : null;
+    }
+
+    /**
+     * The references payments wrote onto this subscription's grants: the
+     * provider ids of its payments (the first one and every cycle).
+     *
+     * @return list<string>
+     */
+    protected function grantRefsOf(object $subscription): array
+    {
+        try {
+            $refs = method_exists($subscription, 'payments')
+                ? collect($subscription->payments()->pluck('provider_id'))->all()
+                : [];
+        } catch (Throwable) {
+            $refs = [];
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($ref): string => is_scalar($ref) ? (string) $ref : '',
+            $refs,
+        ))));
     }
 
     /**

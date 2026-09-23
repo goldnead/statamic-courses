@@ -23,6 +23,17 @@ return [
     'empty_install_heading' => 'Kurse anlegen',
     'empty_install_description' => 'php artisan courses:install ausführen, dann Kurse und Lektionen als Einträge anlegen.',
     'empty_docs_heading' => 'Dokumentation lesen',
+    'permission_holds' => 'Zahlungssperren aufheben',
+    'holds_heading' => 'Zahlungssperren',
+    'holds_help' => 'Lernende, deren Abo-Zahlung gescheitert ist: der Kurs ist gesperrt oder die Freischaltung pausiert, bis die Zahlung eingeht.',
+    'col_learner' => 'Lernende',
+    'col_hold' => 'Sperre',
+    'col_since' => 'Seit',
+    'col_subscription' => 'Abo',
+    'hold_suspended' => 'Gesperrt',
+    'hold_paused' => 'Freischaltung pausiert',
+    'hold_release' => 'Sperre aufheben',
+    'hold_released' => 'Sperre aufgehoben.',
     'empty_docs_description' => 'Aufbau, Sperren, Drip und die Antlers-Tags.',
 
 ];

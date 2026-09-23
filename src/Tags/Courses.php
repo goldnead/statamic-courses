@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Tags;
 
 use Goldnead\Courses\CourseProgress;
+use Goldnead\Courses\Integrations\CourseMediaAccess;
 use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\LessonBlocks;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,15 @@ class Courses extends Tags
     use RendersForms;
 
     protected static $handle = 'courses';
+
+    /**
+     * Whether `{{ consent:gate }}` exists, i.e. statamic-consent is installed:
+     * then a YouTube or Vimeo player waits for consent.
+     */
+    public static function consentGateAvailable(): bool
+    {
+        return app()->bound('statamic.tags') && app('statamic.tags')->has('consent');
+    }
 
     /** The form actions the POST route understands. */
     public const FORM_ACTIONS = ['complete', 'incomplete', 'acknowledge', 'progress'];
@@ -164,7 +174,7 @@ class Courses extends Tags
 
         [$entry, $course, $user] = $readable;
 
-        $blocks = app(LessonBlocks::class)->for($entry, $user, $course['product'] ?? null);
+        $blocks = app(LessonBlocks::class)->for($entry, $user, CourseMediaAccess::resourceFor($course['slug']));
 
         if ($blocks === []) {
             return '';
@@ -178,6 +188,12 @@ class Courses extends Tags
 
         foreach ($blocks as $block) {
             $view = 'courses::blocks.'.$block['type'];
+
+            // With statamic-consent, a YouTube or Vimeo player sits behind its
+            // two-click gate; without it, the player loads as before.
+            if (($block['consent_service'] ?? null) !== null && self::consentGateAvailable()) {
+                $view = 'courses::blocks.video-consent';
+            }
 
             if (view()->exists($view)) {
                 $html .= view($view, $block)->render();

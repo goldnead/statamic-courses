@@ -175,8 +175,10 @@ class CourseRepository
             'prerequisite_slugs' => $prerequisiteSlugs,
             'audience' => $this->audience($entry->get('audience_entitlements'), $entry->get('audience_tags'), $entry->get('audience_segments'), $entry->get('audience_groups')),
             'assessment' => $this->stringOrNull($entry->get('assessment')),
-            'pass_score' => $this->intOrNull($entry->get('pass_score')),
-            'pass_levels' => $this->strings($entry->get('pass_levels')),
+            // Stored under assessment_* handles: adriangoldner.com keeps its own
+            // `pass_score` (a percentage, default 70) on the same lessons.
+            'pass_score' => $this->intOrNull($entry->get('assessment_min_score')),
+            'pass_levels' => $this->strings($entry->get('assessment_pass_levels')),
         ];
     }
 

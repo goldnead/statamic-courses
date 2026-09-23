@@ -64,9 +64,8 @@ return [
     |
     | The asset container the download block picks files from. Written into
     | the lesson blueprint by `courses:install`; null takes the site's first
-    | container. Private downloads (statamic-private-media) must live in that
-    | addon's container instead, so point this at it if every download is paid
-    | material.
+    | container other than the private one. A private download has its own
+    | field on statamic-private-media's container (`private-media.source.container`).
     |
     */
 

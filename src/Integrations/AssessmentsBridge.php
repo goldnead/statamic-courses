@@ -97,9 +97,42 @@ class AssessmentsBridge
      */
     protected function applyToCourse(StatamicUser $learner, array $course, string $handle, array $result): void
     {
-        if (! $this->courses->canAccess($learner, $course['slug'])) {
+        // Brand-neutral: the questionnaire's page runs in the questionnaire's
+        // brand, and the course grant may sit in another. Which brand a grant
+        // was sold under does not decide whether its holder passed a quiz.
+        if (! $this->brandNeutral(fn (): bool => $this->courses->canAccess($learner, $course['slug']))) {
+            Log::debug('statamic-courses: an assessment result for a course the learner cannot open; not applied.', [
+                'course' => $course['slug'],
+                'assessment' => $handle,
+            ]);
+
             return;
         }
+
+        $this->brandNeutral(fn () => $this->applyToLessons($learner, $course, $handle, $result));
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    protected function brandNeutral(callable $callback): mixed
+    {
+        if (app()->bound('brand-context') && method_exists(app('brand-context'), 'withoutBrandScope')) {
+            return app('brand-context')->withoutBrandScope($callback);
+        }
+
+        return $callback();
+    }
+
+    /**
+     * @param  array<string, mixed>  $course
+     * @param  array{score: int, result_key: string|null, response_id: int|null}  $result
+     */
+    protected function applyToLessons(StatamicUser $learner, array $course, string $handle, array $result): void
+    {
 
         foreach ($this->courses->lessons($learner, $course['slug']) ?? [] as $lesson) {
             if (($lesson['assessment'] ?? null) !== $handle || $lesson['is_locked']) {

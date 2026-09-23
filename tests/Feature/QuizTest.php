@@ -1,6 +1,7 @@
 <?php
 
 use Goldnead\Assessments\Events\AssessmentCompleted;
+use Goldnead\BrandContext\Models\Brand;
 use Goldnead\Courses\Events\LessonCompleted;
 use Goldnead\Courses\Events\LessonUnlocked;
 use Goldnead\Courses\Events\QuizFailed;
@@ -14,7 +15,7 @@ use Statamic\Facades\User;
 
 beforeEach(function () {
     $id = $this->makeCourse('cvt', ['sequencing_mode' => 'lesson']);
-    $this->makeLesson($id, 'check', ['sort_order' => 1, 'item_type' => 'quiz', 'assessment' => 'stimm-check', 'pass_score' => 6]);
+    $this->makeLesson($id, 'check', ['sort_order' => 1, 'item_type' => 'quiz', 'assessment' => 'stimm-check', 'assessment_min_score' => 6]);
     $this->makeLesson($id, 'next', ['sort_order' => 2, 'item_type' => 'text']);
 
     $this->user = tap(User::make()->id('learner')->email('learner@example.test'))->save();
@@ -71,7 +72,7 @@ it('records a failed attempt and keeps the lesson open', function () {
 
 it('can require a result level instead of, or as well as, a score', function () {
     $id = $this->makeCourse('levels');
-    $this->makeLesson($id, 'q', ['item_type' => 'quiz', 'assessment' => 'stimm-check', 'pass_levels' => ['advanced']]);
+    $this->makeLesson($id, 'q', ['item_type' => 'quiz', 'assessment' => 'stimm-check', 'assessment_pass_levels' => ['advanced']]);
     Entitlements::grant(new SubjectReference('user', 'learner'), 'levels', 'test');
     $this->actingAs($this->user);
 
@@ -146,6 +147,23 @@ it('shows a super user the quiz of a lesson its audience rule hides from them', 
     } finally {
         @unlink($path);
     }
+});
+
+it('counts a quiz whose questionnaire belongs to another brand than the course grant', function () {
+    config()->set('brand-context.multi_brand', true);
+    app('brand-context')->forget();
+    $courses = Brand::create(['handle' => 'akademie', 'name' => 'Akademie']);
+    $quizzes = Brand::create(['handle' => 'tests', 'name' => 'Tests']);
+
+    $id = $this->makeCourse('branded');
+    $this->makeLesson($id, 'q', ['item_type' => 'quiz', 'assessment' => 'stimm-check']);
+    app('brand-context')->runFor($courses, fn () => Entitlements::grant(new SubjectReference('user', 'learner'), 'branded', 'test'));
+    $this->actingAs($this->user);
+
+    // The questionnaire's page runs in its own brand.
+    app('brand-context')->runFor($quizzes, fn () => event(submitted(10)));
+
+    expect(app('brand-context')->runFor($courses, fn () => Courses::lesson('learner', 'branded', 'q')['is_completed']))->toBeTrue();
 });
 
 it('still refuses to tick a quiz off by hand', function () {

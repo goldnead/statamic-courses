@@ -118,6 +118,74 @@ it('has a German label for every label, instruction and option the blueprints ca
     expect(array_values(array_diff(array_unique($strings), array_keys($german))))->toBe([]);
 });
 
+describe('--merge', function () {
+    beforeEach(function () {
+        // A site's own lesson blueprint as an older version left it, edited
+        // by hand: a field of its own, a pass_score of its own, a drip select
+        // with its own label and only two options, and no blocks.
+        Blueprint::make('course_lesson')->setNamespace('collections.course_lessons')->setContents([
+            'tabs' => ['main' => ['display' => 'Main', 'sections' => [[
+                'fields' => [
+                    ['handle' => 'title', 'field' => ['type' => 'text']],
+                    ['handle' => 'course', 'field' => ['type' => 'entries', 'collections' => ['courses'], 'max_items' => 1]],
+                    ['handle' => 'content', 'field' => ['type' => 'markdown', 'toolbar_mode' => 'floating']],
+                    ['handle' => 'pass_score', 'field' => ['type' => 'integer', 'default' => 70]],
+                    ['handle' => 'own_field', 'field' => ['type' => 'text']],
+                ],
+            ]]]],
+        ])->save();
+
+        Blueprint::make('course')->setNamespace('collections.courses')->setContents([
+            'tabs' => ['main' => ['sections' => [['fields' => [
+                ['handle' => 'title', 'field' => ['type' => 'text']],
+                ['handle' => 'drip_mode', 'field' => ['type' => 'select', 'options' => ['none' => 'Keine', 'schedule' => 'Nach Wochen']]],
+            ]]]]],
+        ])->save();
+
+        Collection::find('courses')->title('Courses')->save();
+    });
+
+    it('adds only what is missing and changes nothing the site has', function () {
+        config()->set('app.locale', 'de');
+
+        $this->artisan('courses:install', ['--merge' => true])->assertSuccessful();
+
+        $lesson = Blueprint::find('collections.course_lessons.course_lesson');
+        $course = Blueprint::find('collections.courses.course');
+
+        expect($lesson->hasField('blocks'))->toBeTrue()
+            ->and($lesson->hasField('assessment_min_score'))->toBeTrue()
+            ->and($lesson->hasField('own_field'))->toBeTrue()
+            ->and($lesson->field('pass_score')->config()['default'])->toBe(70)
+            ->and($lesson->field('content')->config()['toolbar_mode'])->toBe('floating')
+            ->and($course->field('drip_mode')->config()['options'])->toMatchArray(['none' => 'Keine', 'schedule' => 'Nach Wochen', 'days' => 'Nach Tagen ab Einschreibung'])
+            ->and($course->hasField('on_payment_failure'))->toBeTrue()
+            ->and(Collection::find('courses')->title())->toBe('Kurse');
+
+        // The new block field sits right after the field it follows in the shipped blueprint.
+        $handles = collect($lesson->contents()['tabs']['main']['sections'][0]['fields'])->pluck('handle')->all();
+        expect(array_search('blocks', $handles))->toBe(array_search('content', $handles) + 1);
+    });
+
+    it('says what it would add and saves nothing on a dry run', function () {
+        $this->artisan('courses:install', ['--merge' => true, '--dry-run' => true])
+            ->expectsOutputToContain('+ blocks')
+            ->expectsOutputToContain('+ option drip_mode.days')
+            ->assertSuccessful();
+
+        expect(Blueprint::find('collections.course_lessons.course_lesson')->hasField('blocks'))->toBeFalse();
+    });
+
+    it('is a no-op the second time', function () {
+        $this->artisan('courses:install', ['--merge' => true])->assertSuccessful();
+        $before = Blueprint::find('collections.course_lessons.course_lesson')->contents();
+
+        $this->artisan('courses:install', ['--merge' => true])->expectsOutputToContain('up to date')->assertSuccessful();
+
+        expect(Blueprint::find('collections.course_lessons.course_lesson')->contents())->toBe($before);
+    });
+});
+
 it('gives the download block an asset container, the configured one or the first', function () {
     $download = fn () => Blueprint::find('collections.course_lessons.course_lesson')
         ->field('blocks')->config()['sets']['media']['sets']['download']['fields'][0]['field'];
@@ -131,6 +199,25 @@ it('gives the download block an asset container, the configured one or the first
     config()->set('courses.downloads.container', 'paid');
     $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
     expect($download()['container'])->toBe('paid');
+});
+
+it('gives the private download its own field on the private-media container, and drops it without one', function () {
+    $downloadFields = fn () => collect(Blueprint::find('collections.course_lessons.course_lesson')
+        ->field('blocks')->config()['sets']['media']['sets']['download']['fields'])->keyBy('handle');
+
+    AssetContainer::make('media')->disk('local')->save();
+
+    $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+    expect($downloadFields()->keys()->all())->toBe(['file', 'label'])
+        ->and($downloadFields()['file']['field'])->not->toHaveKey('unless');
+
+    AssetContainer::make('private')->disk('local')->save();
+    config()->set('private-media.source.container', 'private');
+
+    $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+    expect($downloadFields()->keys()->all())->toBe(['private', 'file', 'private_file', 'label'])
+        ->and($downloadFields()['private_file']['field']['container'])->toBe('private')
+        ->and($downloadFields()['file']['field']['container'])->toBe('media');
 });
 
 it('localizes the lesson building blocks and the new course settings', function () {

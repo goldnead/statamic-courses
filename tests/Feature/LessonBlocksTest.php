@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Storage;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Entry;
 use Statamic\Facades\User;
+use Statamic\Tags\Tags;
 
 function renderTemplate(string $template, array $data = []): string
 {
@@ -43,7 +44,6 @@ beforeEach(function () {
             ['id' => 'b7', 'type' => 'button', 'label' => 'Book a lesson', 'link' => 'https://example.test/book', 'style' => 'secondary'],
             ['id' => 'b8', 'type' => 'text', 'enabled' => false, 'text' => 'Switched off.'],
             ['id' => 'b9', 'type' => 'download', 'file' => 'missing.pdf'],
-            ['id' => 'b10', 'type' => 'download', 'file' => 'noten/satz.pdf', 'private' => true],
         ],
     ]);
     $this->makeLesson($this->course, 'later', ['sort_order' => 2, 'item_type' => 'text', 'blocks' => [['type' => 'text', 'text' => 'Later.']]]);
@@ -65,24 +65,48 @@ it('turns the stored blocks into template data, older content first, empty and s
         ->and($blocks[7])->toMatchArray(['url' => 'https://example.test/book', 'style' => 'secondary']);
 });
 
-it('drops a private download it cannot have signed', function () {
-    PrivateMedia::$signs = false;
+describe('private downloads', function () {
+    beforeEach(function () {
+        config()->set('private-media.source.container', 'private');
+        Storage::fake('private');
+        AssetContainer::make('private')->disk('private')->save();
+        Storage::disk('private')->put('noten/geheim.pdf', 'x');
 
-    $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir');
+        Entry::find($this->lesson)->set('blocks', [
+            ['id' => 'p1', 'type' => 'download', 'file' => 'noten/satz.pdf', 'label' => 'Public'],
+            ['id' => 'p2', 'type' => 'download', 'private' => true, 'private_file' => 'noten/geheim.pdf', 'label' => 'Private'],
+            // Saved before the private field existed: the file sits in the public container.
+            ['id' => 'p3', 'type' => 'download', 'private' => true, 'file' => 'noten/satz.pdf', 'label' => 'Legacy'],
+        ])->save();
+    });
 
-    expect(collect($blocks)->where('type', 'download')->pluck('private')->all())->toBe([false]);
-});
+    afterEach(function () {
+        PrivateMedia::$signs = false;
+    });
 
-it('links a private download through statamic-private-media, signed for the course product', function () {
-    PrivateMedia::$signs = true;
+    it('drops a private download it cannot have signed', function () {
+        $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'course:choir');
 
-    $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir');
-    $private = collect($blocks)->where('type', 'download')->firstWhere('private', true);
+        expect(collect($blocks)->where('type', 'download')->pluck('label')->all())->toBe(['Public']);
+    });
 
-    expect($private['url'])->toBe('/!/private-media/choir/noten/satz.pdf?signature=test')
-        ->and($private['label'])->toBe('satz.pdf');
+    it('keeps a public and a private download side by side, the private one signed for the course', function () {
+        PrivateMedia::$signs = true;
 
-    PrivateMedia::$signs = false;
+        $blocks = collect(app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'course:choir'))->where('type', 'download')->values();
+
+        expect($blocks->pluck('label')->all())->toBe(['Public', 'Private'])
+            ->and($blocks[0]['url'])->toBe('/assets/noten/satz.pdf')
+            ->and($blocks[1]['url'])->toBe('/!/private-media/course:choir/noten/geheim.pdf?signature=test');
+    });
+
+    it('leaves out a private download whose file is not in the private container', function () {
+        PrivateMedia::$signs = true;
+
+        $labels = collect(app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'course:choir'))->pluck('label')->filter()->all();
+
+        expect($labels)->not->toContain('Legacy');
+    });
 });
 
 it('renders a lesson written before blocks exactly from its content field', function () {
@@ -110,6 +134,35 @@ it('renders the shipped partials through the tag, escaping what authors typed', 
         ->toContain('class="courses-button courses-button--secondary" href="https://example.test/book"')
         ->not->toContain('Switched off.');
 });
+
+it('loads the YouTube player directly without statamic-consent', function () {
+    $this->actingAs($this->user);
+
+    expect(renderTemplate('{{ courses:blocks lesson="'.$this->lesson.'" }}'))
+        ->toContain('<iframe src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"')
+        ->not->toContain('data-consent-gate');
+});
+
+it('puts a YouTube player behind the consent gate when statamic-consent is installed', function () {
+    // statamic-consent's tag, as far as this page uses it. Registered before
+    // the first render: Antlers remembers which tags it could not find.
+    ConsentGateStandIn::register();
+    $this->actingAs($this->user);
+
+    expect(renderTemplate('{{ courses:blocks lesson="'.$this->lesson.'" }}'))
+        ->toContain('<template data-consent-gate="youtube">')
+        ->toContain('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+});
+
+class ConsentGateStandIn extends Tags
+{
+    protected static $handle = 'consent';
+
+    public function gate(): string
+    {
+        return '<template data-consent-gate="'.$this->params->get('service').'">'.$this->parse().'</template>';
+    }
+}
 
 it('hands the blocks to a pair for a site that draws them itself', function () {
     $this->actingAs($this->user);

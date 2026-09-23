@@ -18,6 +18,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $drip_paused_at
  * @property int $drip_paused_seconds
  * @property Carbon|null $access_suspended_at
+ * @property string|null $suspended_by_subscription_id
+ * @property list<string>|null $suspended_grant_refs
  */
 class Enrollment extends Model
 {
@@ -35,6 +37,8 @@ class Enrollment extends Model
         'drip_paused_at',
         'drip_paused_seconds',
         'access_suspended_at',
+        'suspended_by_subscription_id',
+        'suspended_grant_refs',
     ];
 
     protected function casts(): array
@@ -49,6 +53,7 @@ class Enrollment extends Model
             'drip_paused_at' => 'datetime',
             'drip_paused_seconds' => 'integer',
             'access_suspended_at' => 'datetime',
+            'suspended_grant_refs' => 'array',
         ];
     }
 

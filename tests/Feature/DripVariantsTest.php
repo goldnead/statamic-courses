@@ -54,6 +54,32 @@ it('opens a lesson on a fixed calendar date, in the site timezone', function () 
     expect(Courses::isLessonLocked('u', 'c', 'later'))->toBeFalse();
 });
 
+it('counts calendar days in the display timezone, not the app timezone', function () {
+    // app.timezone stays UTC, as it must on a live site; the site's calendar is Berlin.
+    config()->set('app.timezone', 'UTC');
+    config()->set('statamic.system.display_timezone', 'Europe/Berlin');
+    dripCourse($this, 'date', [['later', ['drip_date' => '2026-09-10']]]);
+
+    // Midnight in Berlin (summer time) is 22:00 UTC the day before.
+    Carbon::setTestNow(Carbon::parse('2026-09-09 21:59:00', 'UTC'));
+    expect(Courses::isLessonLocked('u', 'c', 'later'))->toBeTrue();
+
+    Carbon::setTestNow(Carbon::parse('2026-09-09 22:00:00', 'UTC'));
+    expect(Courses::isLessonLocked('u', 'c', 'later'))->toBeFalse();
+});
+
+it('finds the day of the month in the display timezone', function () {
+    config()->set('app.timezone', 'UTC');
+    config()->set('statamic.system.display_timezone', 'Europe/Berlin');
+    dripCourse($this, 'day_of_month', [['first', ['drip_after' => 1]]], ['drip_day_of_month' => 15]);
+
+    // 23:30 UTC on the 14th is already the 15th in Berlin: the enrollment day counts.
+    Carbon::setTestNow(Carbon::parse('2026-09-14 23:30:00', 'UTC'));
+    Courses::enroll('u', 'c');
+
+    expect(Courses::isLessonLocked('u', 'c', 'first'))->toBeFalse();
+});
+
 it('opens lessons on a day of the month, the nth time it comes round after enrollment', function () {
     dripCourse($this, 'day_of_month', [
         ['first', ['drip_after' => 1]],

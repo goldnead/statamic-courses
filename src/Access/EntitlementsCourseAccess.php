@@ -5,6 +5,7 @@ namespace Goldnead\Courses\Access;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Support\LearnerId;
 use Goldnead\Entitlements\EntitlementManager;
+use Goldnead\Entitlements\Support\StateResolver;
 use Goldnead\Entitlements\Support\SubjectReference;
 use Illuminate\Database\Eloquent\Model;
 
@@ -48,6 +49,49 @@ class EntitlementsCourseAccess implements CourseAccess
 
         return false;
     }
+
+    /**
+     * allows(), leaving out the grants a failed subscription paid for.
+     *
+     * A grant payments wrote carries source `statamic-payments` and the
+     * payment's provider id as its reference. `$excludedRefs` are the
+     * references of the subscription whose payment failed; any other live
+     * grant for the course's product or bundles (a lifetime grant, a bundle, a
+     * second subscription, a grant made by hand) still opens the course.
+     *
+     * @param  array<string, mixed>  $course
+     * @param  list<string>  $excludedRefs
+     */
+    public function allowsExcept(mixed $user, array $course, array $excludedRefs): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        $products = array_values(array_filter(
+            [$course['product'] ?? null, ...($course['bundles'] ?? [])],
+            fn ($product): bool => is_string($product) && $product !== '',
+        ));
+
+        if ($products === []) {
+            return false;
+        }
+
+        $query = StateResolver::constrainToAccess(
+            $this->entitlements->forSubject($this->subject($user))->whereIn('product_slug', $products)
+        );
+
+        if ($excludedRefs !== []) {
+            $query->where(fn ($grant) => $grant
+                ->where('source', '!=', self::PAYMENTS_SOURCE)
+                ->orWhereNotIn('source_ref', $excludedRefs));
+        }
+
+        return $query->exists();
+    }
+
+    /** What statamic-payments writes as a grant's source. */
+    public const PAYMENTS_SOURCE = 'statamic-payments';
 
     protected function subject(mixed $user): Model|SubjectReference
     {

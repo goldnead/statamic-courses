@@ -16,5 +16,7 @@ class TeamMemberRemoved
         public readonly string $courseId,
         public readonly string $courseSlug,
         public readonly string $email,
+        /** The purchase the seat belonged to: the course's product or a bundle. */
+        public readonly string $product = '',
     ) {}
 }

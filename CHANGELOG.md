@@ -3,27 +3,36 @@
 ## Unreleased
 
 ### Added
-- Lesson blocks: text, callout, columns, FAQ, video, download (optionally signed by
-  statamic-private-media) and button, rendered by `{{ courses:blocks }}` with overridable
-  partials. The markdown `content` stays and renders first.
+- Lesson blocks: text, callout, columns, FAQ, video, download and button, rendered by
+  `{{ courses:blocks }}` with overridable partials. The markdown `content` stays and renders
+  first. Private downloads have their own field on statamic-private-media's container and are
+  signed for `course:<slug>`; a MediaAccess from courses answers that resource with
+  `canAccess()`, so team members and bundle holders get the file. YouTube and Vimeo wait behind
+  statamic-consent's gate when it is installed.
+- `courses:install --merge` (with `--dry-run`): adds missing fields and select options to
+  existing blueprints and changes nothing else; translates collection titles still in English.
 - Drip modes `days`, `date`, `day_of_month`, `payments` and `after_trial` (lesson fields
   `drip_after`, `drip_date`; course field `drip_day_of_month`), `Courses::recordBilling()`.
 - Lessons and sections limited to entitlements, user groups, LeadHub tags or LeadHub segments.
-- Quiz lessons from statamic-assessments: a pass completes the lesson, a fail records the attempt.
-  `{{ courses:quiz }}`.
+- Quiz lessons from statamic-assessments (`assessment`, `assessment_min_score`,
+  `assessment_pass_levels`): a pass completes the lesson, a fail records the attempt; applied
+  brand-neutrally. `{{ courses:quiz }}`.
 - `on_payment_failure` per course (`keep`, `pause_drip`, `revoke`), applied from
-  statamic-payments' subscription events; pause, resume, suspend and restore in the facade.
-- Bundles on the course (`bundles`) and team seats (`team_seats`, `courses_team_members`,
-  `POST /!/courses/team`, `{{ courses:team }}`, `{{ courses:team_form }}`).
+  statamic-payments' subscription events. A hold remembers its subscription and only takes away
+  what that one paid for; a new purchase lifts it. Payment holds on the Course Progress screen,
+  lifted there with the permission `manage course holds`.
+- Bundles on the course (`bundles`) and team seats per purchase (`team_seats`,
+  `courses_team_members`, `POST /!/courses/team`, `{{ courses:team }}`,
+  `{{ courses:team_form }}`); a bundle's team covers all its courses.
+- Calendar drip days are counted in `statamic.system.display_timezone`.
 - Events `LearnerEnrolled`, `LessonUnlocked`, `QuizPassed`, `QuizFailed`, `DripPaused`,
   `DripResumed`, `CourseAccessSuspended`, `CourseAccessRestored`, `TeamMemberAdded`,
   `TeamMemberRemoved`.
 - Config `downloads.container`.
 
 ### Changed
-- Two migrations: billing and hold columns on `courses_enrollments`, table
-  `courses_team_members`. Run `php artisan migrate`, then `courses:install --force` for the new
-  blueprint fields.
+- Three migrations: billing, hold and hold-source columns on `courses_enrollments`, table
+  `courses_team_members`. Run `php artisan migrate`, then `courses:install --merge`.
 - `courses:install` writes an asset container into the download field.
 - A lesson locked by the drip reports its drip reason first, also before the learner enrolled.
 

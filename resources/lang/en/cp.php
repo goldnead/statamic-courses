@@ -25,4 +25,16 @@ return [
     'empty_docs_heading' => 'Read the documentation',
     'empty_docs_description' => 'Structure, locks, drip and the Antlers tags.',
 
+    'permission_holds' => 'Lift payment holds',
+    'holds_heading' => 'Payment holds',
+    'holds_help' => 'Learners whose subscription payment failed: the course is closed or the drip paused until the payment arrives.',
+    'col_learner' => 'Learner',
+    'col_hold' => 'Hold',
+    'col_since' => 'Since',
+    'col_subscription' => 'Subscription',
+    'hold_suspended' => 'Closed',
+    'hold_paused' => 'Drip paused',
+    'hold_release' => 'Lift hold',
+    'hold_released' => 'Hold lifted.',
+
 ];

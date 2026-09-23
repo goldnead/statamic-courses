@@ -26,6 +26,34 @@ namespace Goldnead\StatamicPayments\Events {
     }
 }
 
+namespace Goldnead\Courses\Tests\Fakes {
+    use Illuminate\Support\Collection;
+
+    if (! class_exists(FakeSubscription::class)) {
+        /**
+         * The Subscription model's shape as the bridge reads it, with
+         * payments() answering what the relation would pluck.
+         */
+        class FakeSubscription
+        {
+            /** @param list<string> $paymentRefs */
+            public function __construct(
+                public int|string $id = 1,
+                public ?string $email = 'buyer@example.test',
+                public string $product = 'monthly-membership',
+                public int $times_charged = 0,
+                public mixed $starts_at = null,
+                public array $paymentRefs = ['tr_first'],
+            ) {}
+
+            public function payments(): Collection
+            {
+                return collect($this->paymentRefs)->map(fn (string $ref) => ['provider_id' => $ref]);
+            }
+        }
+    }
+}
+
 namespace Goldnead\StatamicPayments\Support {
     if (! class_exists(Catalogue::class)) {
         class Catalogue

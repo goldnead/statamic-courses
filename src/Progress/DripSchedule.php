@@ -19,7 +19,7 @@ use Goldnead\Courses\Models\Enrollment;
  * |----------------|---------------|---------------------------------------------------------|
  * | `schedule`     | `week`        | week N after enrollment (7 days per week), or earlier by hand |
  * | `days`         | `drip_after`  | N days after enrollment                                 |
- * | `date`         | `drip_date`   | on that calendar day, site timezone                     |
+ * | `date`         | `drip_date`   | on that calendar day, display timezone                  |
  * | `day_of_month` | `drip_after`  | the Nth time the course's day of the month comes round, the enrollment day included |
  * | `payments`     | `drip_after`  | once N payments have gone through                       |
  * | `after_trial`  | `drip_after` ≥ 1 | once the first charge after a trial has gone through |
@@ -128,7 +128,7 @@ class DripSchedule
                 $date = $lesson['drip_date'] ?? null;
 
                 return is_string($date) && $date !== ''
-                    ? CarbonImmutable::parse($date, (string) config('app.timezone'))->startOfDay()
+                    ? CarbonImmutable::parse($date, self::calendarTimezone())->startOfDay()
                     : false;
 
             case 'day_of_month':
@@ -188,13 +188,13 @@ class DripSchedule
 
     /**
      * The Nth occurrence of `$day` on or after `$start`'s calendar day, at
-     * midnight in the site timezone. A day beyond a month's end falls on its
+     * midnight in the display timezone. A day beyond a month's end falls on its
      * last day (31 in February is the 28th or 29th).
      */
     protected function nthDayOfMonth(CarbonImmutable $start, int $day, int $n): CarbonImmutable
     {
         $day = max(1, min(31, $day));
-        $local = $start->setTimezone((string) config('app.timezone'))->startOfDay();
+        $local = $start->setTimezone(self::calendarTimezone())->startOfDay();
         $month = $local->startOfMonth();
 
         $candidate = $month->setDay(min($day, $month->daysInMonth));
@@ -207,6 +207,18 @@ class DripSchedule
         $target = $candidate->startOfMonth()->addMonthsNoOverflow($n - 1);
 
         return $target->setDay(min($day, $target->daysInMonth));
+    }
+
+    /**
+     * The timezone a calendar day is counted in: Statamic's display timezone,
+     * the one the Control Panel shows dates in. app.timezone stays UTC on a
+     * live site and must not be turned to get local days.
+     */
+    public static function calendarTimezone(): string
+    {
+        $display = config('statamic.system.display_timezone');
+
+        return is_string($display) && $display !== '' ? $display : (string) config('app.timezone', 'UTC');
     }
 
     /**

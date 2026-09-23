@@ -21,6 +21,7 @@ use Goldnead\Courses\Progress\LockResolver;
 use Goldnead\Courses\Support\Audience;
 use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\EventRecorder;
+use Goldnead\Courses\Support\Holds;
 use Goldnead\Courses\Support\LearnerId;
 use Goldnead\Courses\Support\Teams;
 use Illuminate\Support\Carbon;
@@ -53,6 +54,7 @@ class CourseProgress
         protected CourseAccess $access,
         protected Audience $audience,
         protected Teams $teams,
+        protected Holds $holds,
     ) {}
 
     /**
@@ -89,12 +91,27 @@ class CourseProgress
             return false;
         }
 
-        if ($this->isSuspended($user, $course)) {
-            return false;
-        }
-
-        return $this->access->allows($user, $course)
+        return $this->holds->holdsCourse($user, $course)
             || $this->teams->grantsAccess($user, $course);
+    }
+
+    /**
+     * The learner's payment hold on a course, or null: when it started, which
+     * subscription set it, and whether it shuts the course right now (another
+     * grant may keep it open).
+     *
+     * @return array{since: string|null, subscription_id: string|null, blocks: bool}|null
+     */
+    public function hold(mixed $user, string $courseSlug): ?array
+    {
+        $course = $this->courses->findCourse($courseSlug);
+        $hold = $course === null || $user === null ? null : $this->holds->suspension($user, $course['id']);
+
+        return $hold === null ? null : [
+            'since' => $hold->access_suspended_at?->toIso8601String(),
+            'subscription_id' => $hold->suspended_by_subscription_id,
+            'blocks' => $this->holds->blocks($user, $course),
+        ];
     }
 
     /**
@@ -187,13 +204,23 @@ class CourseProgress
      * Shuts the course for this learner, whatever their entitlement says
      * (K5, `revoke`). Undone by restoreAccess().
      */
-    public function suspendAccess(mixed $user, string $courseSlug, string $reason = 'manual'): ?Enrollment
+    /**
+     * `$subscriptionId` and `$grantRefs` name the subscription whose failed
+     * payment set the hold and the payment references of its grants. Given,
+     * the hold only takes away what that subscription paid for; without them
+     * (a hold set by hand) it shuts the course.
+     *
+     * @param  list<string>  $grantRefs
+     */
+    public function suspendAccess(mixed $user, string $courseSlug, string $reason = 'manual', ?string $subscriptionId = null, array $grantRefs = []): ?Enrollment
     {
         $suspended = false;
 
-        $enrollment = $this->writeEnrollment($user, $courseSlug, 'access_suspended', function (Enrollment $enrollment) use (&$suspended): void {
+        $enrollment = $this->writeEnrollment($user, $courseSlug, 'access_suspended', function (Enrollment $enrollment) use (&$suspended, $subscriptionId, $grantRefs): void {
             if ($enrollment->access_suspended_at === null) {
                 $enrollment->access_suspended_at = now();
+                $enrollment->suspended_by_subscription_id = $subscriptionId;
+                $enrollment->suspended_grant_refs = $subscriptionId !== null ? array_values(array_unique($grantRefs)) : null;
                 $suspended = true;
             }
         });
@@ -212,6 +239,8 @@ class CourseProgress
         $enrollment = $this->writeEnrollment($user, $courseSlug, 'access_restored', function (Enrollment $enrollment) use (&$restored): void {
             if ($enrollment->access_suspended_at !== null) {
                 $enrollment->access_suspended_at = null;
+                $enrollment->suspended_by_subscription_id = null;
+                $enrollment->suspended_grant_refs = null;
                 $restored = true;
             }
         });
@@ -228,8 +257,10 @@ class CourseProgress
      * `on_payment_failure` says: `keep` nothing (the paid period runs out on
      * its own), `pause_drip` stops the drip, `revoke` shuts the course.
      * Answers the mode that was applied.
+     *
+     * @param  list<string>  $grantRefs  payment references of the subscription's grants, see suspendAccess()
      */
-    public function paymentFailed(mixed $user, string $courseSlug): ?string
+    public function paymentFailed(mixed $user, string $courseSlug, ?string $subscriptionId = null, array $grantRefs = []): ?string
     {
         $course = $this->courses->findCourse($courseSlug);
 
@@ -239,7 +270,7 @@ class CourseProgress
 
         match ($course['on_payment_failure']) {
             'pause_drip' => $this->pauseDrip($user, $courseSlug, 'payment_failed'),
-            'revoke' => $this->suspendAccess($user, $courseSlug, 'payment_failed'),
+            'revoke' => $this->suspendAccess($user, $courseSlug, 'payment_failed', $subscriptionId, $grantRefs),
             default => null,
         };
 
@@ -250,8 +281,12 @@ class CourseProgress
      * The money arrived after all: lift whatever paymentFailed() put in place.
      * Both holds are lifted, not only the course's current mode, so a mode
      * changed in between cannot strand a learner.
+     *
+     * With `$subscriptionId` (a renewal), a hold another subscription set
+     * stays: that one has still not been paid. Without it (a new purchase,
+     * a manual release), every hold goes.
      */
-    public function paymentRecovered(mixed $user, string $courseSlug): void
+    public function paymentRecovered(mixed $user, string $courseSlug, ?string $subscriptionId = null, string $reason = 'payment_recovered'): void
     {
         $course = $this->courses->findCourse($courseSlug);
 
@@ -265,24 +300,58 @@ class CourseProgress
             ->first();
 
         if ($enrollment?->drip_paused_at !== null) {
-            $this->resumeDrip($user, $courseSlug, 'payment_recovered');
+            $this->resumeDrip($user, $courseSlug, $reason);
         }
 
-        if ($enrollment?->access_suspended_at !== null) {
-            $this->restoreAccess($user, $courseSlug, 'payment_recovered');
+        $heldByOther = $subscriptionId !== null
+            && $enrollment?->suspended_by_subscription_id !== null
+            && $enrollment->suspended_by_subscription_id !== $subscriptionId;
+
+        if ($enrollment?->access_suspended_at !== null && ! $heldByOther) {
+            $this->restoreAccess($user, $courseSlug, $reason);
         }
     }
 
     /**
+     * Every learner with a payment hold or a paused drip, per course, for the
+     * Control Panel.
+     *
+     * @return list<array{enrollment_id: int, user_id: string, email: string|null, course: string, course_title: string, kind: string, since: string|null, subscription_id: string|null}>
+     */
+    public function holds(): array
+    {
+        $courses = collect($this->courses->allCourses())->keyBy('id');
+
+        return Enrollment::query()
+            ->where(fn ($query) => $query->whereNotNull('access_suspended_at')->orWhereNotNull('drip_paused_at'))
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (Enrollment $enrollment): bool => $courses->has($enrollment->course_entry_id))
+            ->map(fn (Enrollment $enrollment): array => [
+                'enrollment_id' => (int) $enrollment->getKey(),
+                'user_id' => $enrollment->user_id,
+                'email' => Support\Learner::email($enrollment->user_id),
+                'course' => $courses[$enrollment->course_entry_id]['slug'],
+                'course_title' => $courses[$enrollment->course_entry_id]['title'],
+                'kind' => $enrollment->access_suspended_at !== null ? 'suspended' : 'paused',
+                'since' => ($enrollment->access_suspended_at ?? $enrollment->drip_paused_at)?->toIso8601String(),
+                'subscription_id' => $enrollment->suspended_by_subscription_id,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Team access (K6). The owner is the buyer; members are kept by email.
-     * Refused (null) when the owner cannot open the course themselves, the
-     * course has no seats, or every seat is taken.
+     * Refused (null) when the owner does not hold the course by a purchase
+     * with seats, or every seat is taken. One team per purchase: a bundle's
+     * team covers every course of the bundle.
      */
     public function addTeamMember(mixed $owner, string $courseSlug, string $email): ?TeamMember
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        return $course === null || ! $this->ownsCourse($owner, $course) ? null : $this->teams->add($owner, $course, $email);
+        return $course === null ? null : $this->teams->add($owner, $course, $email);
     }
 
     public function removeTeamMember(mixed $owner, string $courseSlug, string $email): bool
@@ -293,36 +362,13 @@ class CourseProgress
     }
 
     /**
-     * @return array{seats: int, used: int, left: int, members: list<array{email: string, added_at: string|null}>}|null
+     * @return array{product: string, seats: int, used: int, left: int, members: list<array{email: string, added_at: string|null}>}|null
      */
     public function team(mixed $owner, string $courseSlug): ?array
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        return $course === null || ! $this->ownsCourse($owner, $course) ? null : $this->teams->summary($owner, $course);
-    }
-
-    /**
-     * Holds the course by purchase, not through somebody's team: only such
-     * a learner may hand out seats.
-     *
-     * @param  array<string, mixed>  $course
-     */
-    protected function ownsCourse(mixed $owner, array $course): bool
-    {
-        return $owner !== null && ! $this->isSuspended($owner, $course) && $this->access->allows($owner, $course);
-    }
-
-    /**
-     * @param  array<string, mixed>  $course
-     */
-    protected function isSuspended(mixed $user, array $course): bool
-    {
-        return Enrollment::query()
-            ->where('user_id', LearnerId::of($user))
-            ->where('course_entry_id', $course['id'])
-            ->whereNotNull('access_suspended_at')
-            ->exists();
+        return $course === null || $owner === null ? null : $this->teams->summary($owner, $course);
     }
 
     /**

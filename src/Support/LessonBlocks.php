@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Support;
 
+use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Assets\Asset as AssetContract;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Asset;
@@ -37,7 +38,8 @@ class LessonBlocks
     public const PRIVATE_MEDIA = 'Goldnead\\PrivateMedia\\PrivateMedia';
 
     /**
-     * @param  string|null  $resource  the course's product: what a private download is signed for
+     * @param  string|null  $resource  what a private download is signed for: `course:<slug>`, which
+     *                                 CourseMediaAccess answers with Courses::canAccess()
      * @return list<array<string, mixed>>
      */
     public function for(StatamicEntry $lesson, mixed $user = null, ?string $resource = null): array
@@ -149,7 +151,16 @@ class LessonBlocks
             return null;
         }
 
-        return ['type' => 'video', 'url' => $url, 'embed_url' => self::embedUrl($url), 'caption' => trim((string) ($block['caption'] ?? ''))];
+        $embed = self::embedUrl($url);
+
+        return [
+            'type' => 'video',
+            'url' => $url,
+            'embed_url' => $embed,
+            'caption' => trim((string) ($block['caption'] ?? '')),
+            // The service statamic-consent must allow before the player loads.
+            'consent_service' => $embed === null ? null : (str_contains($embed, 'vimeo') ? 'vimeo' : 'youtube'),
+        ];
     }
 
     /**
@@ -158,13 +169,28 @@ class LessonBlocks
      */
     protected function download(array $block, mixed $user, ?string $resource): ?array
     {
-        $asset = $this->asset($block['file'] ?? null);
+        $private = (bool) ($block['private'] ?? false);
+        // A private download keeps its file in its own field; a block saved
+        // before that field existed still has it under `file`.
+        $asset = $this->asset($private ? ($block['private_file'] ?? $block['file'] ?? null) : ($block['file'] ?? null));
 
         if (! $asset instanceof AssetContract) {
             return null;
         }
 
-        $private = (bool) ($block['private'] ?? false);
+        $container = $asset instanceof \Statamic\Assets\Asset ? $asset->containerHandle() : null;
+
+        if ($private && $container !== config('private-media.source.container')) {
+            // private-media serves only its own container: a link to a file
+            // elsewhere would be refused, and the file may be public anyway.
+            Log::warning('statamic-courses: a private download points at a file outside the private-media container and is left out.', [
+                'container' => $container,
+                'file' => $asset->basename(),
+            ]);
+
+            return null;
+        }
+
         $url = $private ? $this->signedUrl($asset, $user, $resource) : $asset->url();
 
         if (! is_string($url) || $url === '') {

@@ -35,8 +35,9 @@ A **course** entry carries `sequencing_mode` (`none`, `section`, `lesson`), `dri
 below) and `product`, the entitlements product that opens it (defaults to the course slug), plus
 `bundles`, `team_seats`, `on_payment_failure` and `section_audiences`.
 
-Upgrading from 0.1: run `php artisan migrate`, then `php artisan courses:install --force` to get
-the new fields. `--force` rewrites both blueprints; fields you added by hand must be added again.
+Upgrading from 0.1: run `php artisan migrate`, then `php artisan courses:install --merge`. It adds
+the fields and select options the site's blueprints lack and changes nothing else; see first with
+`--merge --dry-run`. (`--force` rewrites both blueprints and loses fields added by hand.)
 
 A **lesson** entry points at its course (`course`) and orders itself with `section_key`,
 `section_order` and `sort_order`. Optional: `phase_key` / `phase_order` (later phases wait for
@@ -64,7 +65,7 @@ earlier ones), `is_test_out`, `week` (with schedule drip), `prerequisite_lessons
    |---|---|---|
    | `schedule` | `week` | week *n* opens `(n − 1) × 7` days after enrollment, or earlier with `advanceToWeek()` |
    | `days` | `drip_after` | *n* days after enrollment |
-   | `date` | `drip_date` | on that day, site timezone |
+   | `date` | `drip_date` | on that day, in `statamic.system.display_timezone` (else app.timezone) |
    | `day_of_month` | `drip_after` | the *n*th time the course's `drip_day_of_month` comes round, the enrollment day included |
    | `payments` | `drip_after` | once *n* payments went through (the first included) |
    | `after_trial` | `drip_after` ≥ 1 | once the first charge after a trial went through; at once without a trial |
@@ -91,9 +92,12 @@ path. Tags and segments need statamic-leadhub; without it such a rule matches no
 - `keep` (default): nothing; access runs out at the end of the paid period, as entitlements has it.
 - `pause_drip`: the drip clock stops. Afterwards every relative release date moves on by the
   length of the pause.
-- `revoke`: the course is closed for the learner until the payment arrives.
+- `revoke`: what that subscription paid for is taken away until the payment arrives. Any other
+  source still opens the course: a lifetime grant, a bundle, another subscription, a team seat.
+  A new purchase lifts the hold at once.
 
-Without payments: `Courses::paymentFailed()`, `paymentRecovered()`, `pauseDrip()`,
+Holds show on the Course Progress screen under **Payment holds**, where somebody with the
+permission `manage course holds` can lift one. Without payments: `Courses::paymentFailed()`, `paymentRecovered()`, `pauseDrip()`,
 `resumeDrip()`, `suspendAccess()`, `restoreAccess()`.
 
 ## Bundles and teams
@@ -102,22 +106,29 @@ A course opens for its `product` and for every product listed under `bundles`: s
 product and list it on each course it contains. (A PackageResolver in entitlements works as well.)
 
 `team_seats` lets a buyer add that many people by email (`Courses::addTeamMember()`, the
-`courses:team_form` tag). A member gets in with that address for as long as the buyer holds the
-course. statamic-entitlements has no seats of its own yet; the team lives in
-`courses_team_members`.
+`courses:team_form` tag). Seats belong to the purchase: bought through a bundle, one team with the
+same members covers every course of the bundle, and the seat count is the highest `team_seats`
+among those courses. A member gets in with that address for as long as the buyer holds the
+purchase. statamic-entitlements has no seats of its own yet; the team lives in
+`courses_team_members`, one row per seat.
 
 ## Lesson content
 
 Besides the markdown `content` (kept, rendered first), a lesson has `blocks`: text, callout,
-columns, FAQ, video (YouTube and Vimeo become players), download and button. A download marked
-“only for learners of this course” is served through a signed link by statamic-private-media,
-signed for the course product; without that addon it is left out. `courses:install` points the
-download field at `courses.downloads.container` or the first asset container.
+columns, FAQ, video (YouTube and Vimeo become players; with statamic-consent installed they wait
+behind `{{ consent:gate }}` for the `youtube` or `vimeo` service), download and button.
+
+A download marked “only for learners of this course” takes its file from its own field on
+statamic-private-media's container and is served through a link signed for `course:<slug>`.
+courses answers private-media for that resource with `Courses::canAccess()`, so buyers, team
+members and bundle holders all get the file. Public and private downloads sit side by side.
+Without private-media the toggle is not offered. `courses:install` points the public field at
+`courses.downloads.container` or the first container other than the private one.
 
 ## Quiz
 
 A quiz lesson names a statamic-assessments questionnaire (`assessment`) and optionally
-`pass_score` and `pass_levels`. When the signed-in learner submits it, a pass completes the lesson
+`assessment_min_score` and `assessment_pass_levels`. When the signed-in learner submits it, a pass completes the lesson
 (source `assessment`, opening whatever waited on it) and a fail records the attempt.
 
 ## Usage

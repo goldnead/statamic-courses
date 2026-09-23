@@ -3,6 +3,7 @@
 use Goldnead\Courses\Events\TeamMemberAdded;
 use Goldnead\Courses\Events\TeamMemberRemoved;
 use Goldnead\Courses\Facades\Courses;
+use Goldnead\Courses\Models\TeamMember;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
 use Illuminate\Support\Facades\Event;
@@ -88,6 +89,31 @@ describe('teams', function () {
         Courses::suspendAccess($this->owner, 'team-course');
 
         expect(Courses::canAccess($this->member, 'team-course'))->toBeFalse();
+    });
+
+    it('never hands out more seats than there are, even when a seat is taken between counting and inserting', function () {
+        Courses::addTeamMember($this->owner, 'team-course', 'a@example.test');
+
+        // Another request took seat 2 after this one counted: the unique
+        // slot index sends this one on, and there is no seat 3.
+        TeamMember::query()->create(['owner_id' => 'owner', 'product' => 'team-course', 'email' => 'racer@example.test', 'slot' => 2]);
+
+        expect(Courses::addTeamMember($this->owner, 'team-course', 'b@example.test'))->toBeNull()
+            ->and(TeamMember::query()->where('owner_id', 'owner')->count())->toBe(2);
+    });
+
+    it('gives a bundle one team for all its courses, with the seats counted once', function () {
+        $this->makeCourse('part-one', ['bundles' => ['team-pack'], 'team_seats' => 2]);
+        $this->makeCourse('part-two', ['bundles' => ['team-pack'], 'team_seats' => 2]);
+        Entitlements::grant(new SubjectReference('user', 'owner'), 'team-pack', 'test');
+
+        Courses::addTeamMember($this->owner, 'part-one', 'member@example.test');
+        Courses::addTeamMember($this->owner, 'part-two', 'x@example.test');
+
+        expect(Courses::canAccess($this->member, 'part-one'))->toBeTrue()
+            ->and(Courses::canAccess($this->member, 'part-two'))->toBeTrue()
+            ->and(Courses::team($this->owner, 'part-one'))->toMatchArray(['product' => 'team-pack', 'seats' => 2, 'used' => 2, 'left' => 0])
+            ->and(Courses::addTeamMember($this->owner, 'part-two', 'y@example.test'))->toBeNull();
     });
 
     it('refuses seats to somebody who does not hold the course, to a course without seats, and to a team member', function () {

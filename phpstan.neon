@@ -12,6 +12,11 @@ parameters:
     # entitlements is a `suggest`. It sits in require-dev, so the access
     # bridge is analysed against the real classes.
 
+    # Implements statamic-private-media's MediaAccess, a `suggest` that is not
+    # installed here; loaded only when that interface exists.
+    excludePaths:
+        - src/Integrations/CourseMediaAccess.php
+
     treatPhpDocTypesAsCertain: false
 
     # Larastan only knows the host app's config directory; this is the

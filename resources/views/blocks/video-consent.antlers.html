@@ -1,0 +1,9 @@
+{{# The video block when statamic-consent is installed: the player loads only after the visitor allows the service. #}}
+<figure class="courses-block courses-block--video courses-video">
+    {{ consent:gate :service="consent_service" :title="caption" }}
+        <div class="courses-video__frame" style="position: relative; aspect-ratio: 16 / 9;">
+            <iframe src="{{ embed_url | sanitize }}" title="{{ if caption }}{{ caption | sanitize }}{{ else }}Video{{ /if }}" loading="lazy" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0;"></iframe>
+        </div>
+    {{ /consent:gate }}
+    {{ if caption }}<figcaption class="courses-video__caption">{{ caption | sanitize }}</figcaption>{{ /if }}
+</figure>

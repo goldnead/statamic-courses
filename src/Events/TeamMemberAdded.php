@@ -17,5 +17,7 @@ class TeamMemberAdded
         public readonly string $courseId,
         public readonly string $courseSlug,
         public readonly string $email,
+        /** The purchase the seat belongs to: the course's product or a bundle. */
+        public readonly string $product = '',
     ) {}
 }

@@ -56,7 +56,7 @@ tabs:
               if:
                 item_type: 'equals quiz'
           -
-            handle: pass_score
+            handle: assessment_min_score
             field:
               type: integer
               display: 'Minimum score'
@@ -64,7 +64,7 @@ tabs:
               if:
                 item_type: 'equals quiz'
           -
-            handle: pass_levels
+            handle: assessment_pass_levels
             field:
               type: taggable
               display: 'Passing result levels'
@@ -202,24 +202,35 @@ tabs:
                       icon: download
                       fields:
                         -
+                          handle: private
+                          field:
+                            type: toggle
+                            display: 'Only for learners of this course'
+                            default: false
+                            instructions: 'Serves the file from the private container through a signed link, so only somebody who may open the course can download it.'
+                        -
                           handle: file
                           field:
                             type: assets
                             display: File
                             max_files: 1
+                            unless:
+                              private: 'equals true'
+                        -
+                          handle: private_file
+                          field:
+                            type: assets
+                            display: 'Private file'
+                            max_files: 1
+                            container: '@private-media'
+                            if:
+                              private: 'equals true'
                         -
                           handle: label
                           field:
                             type: text
                             display: Label
                             instructions: 'The link text. Empty: the file name.'
-                        -
-                          handle: private
-                          field:
-                            type: toggle
-                            display: 'Only for learners of this course'
-                            default: false
-                            instructions: 'Serves the file through a signed link (statamic-private-media), so only somebody who may open the course can download it. Without that addon the file is not linked at all.'
                     button:
                       display: Button
                       icon: direction-buttons

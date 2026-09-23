@@ -5,10 +5,13 @@ import {
     Badge,
     Button,
     CommandPaletteItem,
+    Description,
     DocsCallout,
+    DropdownItem,
     EmptyStateItem,
     EmptyStateMenu,
     Header,
+    Heading,
     Icon,
     Listing,
 } from '@statamic/cms/ui';
@@ -22,7 +25,14 @@ const props = defineProps({
     hasCollection: { type: Boolean, default: false },
     collectionUrl: { type: String, default: null },
     stuckHelp: { type: String, default: '' },
+    holds: { type: Array, default: () => [] },
+    holdColumns: { type: Array, default: () => [] },
+    canRelease: { type: Boolean, default: false },
 });
+
+function release(row) {
+    router.post(row.release_url, {}, { preserveScroll: true });
+}
 
 const docsUrl = 'https://docs.adriangoldner.dev/courses/';
 
@@ -126,6 +136,45 @@ function formatDate(value) {
                     <span v-else class="text-gray-500 dark:text-gray-400">&mdash;</span>
                 </template>
             </Listing>
+
+            <template v-if="holds.length">
+                <div class="mt-10 mb-3">
+                    <Heading size="lg" :text="__('courses::cp.holds_heading')" />
+                    <Description :text="__('courses::cp.holds_help')" />
+                </div>
+
+                <Listing
+                    :items="holds"
+                    :columns="holdColumns"
+                    preferences-prefix="courses.holds"
+                    sort-column="since"
+                    sort-direction="desc"
+                    @refreshing="reload"
+                >
+                    <template #cell-email="{ row }">{{ row.email || row.user_id }}</template>
+
+                    <template #cell-kind="{ row }">
+                        <Badge
+                            pill
+                            :color="row.kind === 'suspended' ? 'red' : 'amber'"
+                            :text="row.kind === 'suspended' ? __('courses::cp.hold_suspended') : __('courses::cp.hold_paused')"
+                        />
+                    </template>
+
+                    <template #cell-since="{ row }">
+                        <span v-if="row.since" class="whitespace-nowrap">{{ formatDate(row.since) }}</span>
+                    </template>
+
+                    <template #cell-subscription_id="{ row }">
+                        <span v-if="row.subscription_id">{{ row.subscription_id }}</span>
+                        <span v-else class="text-gray-500 dark:text-gray-400">&mdash;</span>
+                    </template>
+
+                    <template #prepended-row-actions="{ row }">
+                        <DropdownItem v-if="canRelease" :text="__('courses::cp.hold_release')" icon="padlock-unlocked" @click="release(row)" />
+                    </template>
+                </Listing>
+            </template>
         </template>
 
         <DocsCallout :topic="__('courses::cp.title')" :url="docsUrl" />

@@ -6,6 +6,7 @@ use Goldnead\Courses\Access\ClosedCourseAccess;
 use Goldnead\Courses\Access\EntitlementsCourseAccess;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Integrations\AssessmentsBridge;
+use Goldnead\Courses\Integrations\CourseMediaAccess;
 use Goldnead\Courses\Integrations\PaymentsBridge;
 use Goldnead\Entitlements\EntitlementManager;
 use Illuminate\Support\Facades\Event;
@@ -51,6 +52,13 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->bindIf(CourseAccess::class, fn ($app) => class_exists(EntitlementManager::class)
             ? $app->make(EntitlementsCourseAccess::class)
             : new ClosedCourseAccess);
+
+        // private-media asks the course about a course's private downloads.
+        // `extend`, not `bind`: the site's own MediaAccess, or private-media's
+        // default, stays in charge of every other resource.
+        if (CourseMediaAccess::available()) {
+            $this->app->extend(CourseMediaAccess::CONTRACT, fn ($inner) => new CourseMediaAccess($inner));
+        }
 
         // Bound by class name, never under a short slug: a container key named
         // after the addon is how a sibling once overwrote Laravel's own `events`.
@@ -129,15 +137,19 @@ class ServiceProvider extends AddonServiceProvider
     }
 
     /**
-     * One permission: reading who is where in which course. Nothing on the
-     * screen writes, so nothing else needs permitting.
+     * Reading who is where in which course, and, under it, lifting a
+     * learner's payment hold: the one write the screen offers.
      */
     protected function bootPermissions(): self
     {
         Permission::extend(function (): void {
             Permission::group('courses', __('courses::cp.nav'), function (): void {
                 Permission::register('view course progress')
-                    ->label(__('courses::cp.permission_view'));
+                    ->label(__('courses::cp.permission_view'))
+                    ->children([
+                        Permission::make('manage course holds')
+                            ->label(__('courses::cp.permission_holds')),
+                    ]);
             });
         });
 

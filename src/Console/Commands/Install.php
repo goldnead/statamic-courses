@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Console\Commands;
 
+use Goldnead\Courses\Support\LessonBlocks;
 use Illuminate\Console\Command;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
@@ -14,10 +15,18 @@ use Statamic\Facades\YAML;
  * Idempotent and polite: an existing collection or blueprint is left alone
  * unless --force is given, so running it on a live site cannot overwrite
  * fields somebody added by hand.
+ *
+ * --merge is the update path for a site that already has the blueprints: it
+ * adds the fields a newer version ships and the site lacks, and the options a
+ * select of the same handle lacks, and changes nothing else. --dry-run says
+ * what it would add without saving.
  */
 class Install extends Command
 {
-    protected $signature = 'courses:install {--force : Overwrite blueprints that already exist}';
+    protected $signature = 'courses:install
+        {--force : Overwrite blueprints that already exist}
+        {--merge : Add missing fields and options to existing blueprints, change nothing else}
+        {--dry-run : With --merge, list what would be added without saving}';
 
     protected $description = 'Create the course and lesson collections with their blueprints.';
 
@@ -41,14 +50,26 @@ class Install extends Command
         $this->ensureBlueprint($courses, 'course', $courses, $lessons);
         $this->ensureBlueprint($lessons, 'course_lesson', $courses, $lessons);
 
-        $this->components->info('Courses installed.');
+        $this->components->info($this->option('dry-run') ? 'Dry run: nothing was saved.' : 'Courses installed.');
 
         return self::SUCCESS;
     }
 
     protected function ensureCollection(string $handle, string $title, string $route): void
     {
-        if (Collection::find($handle)) {
+        if ($collection = Collection::find($handle)) {
+            // An update may translate a title that is still the English
+            // default; a title somebody chose is theirs.
+            if ($this->option('merge') && $collection->title() !== $title && in_array($collection->title(), ['Courses', 'Course Lessons'], true)) {
+                if (! $this->option('dry-run')) {
+                    $collection->title($title)->save();
+                }
+
+                $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", "title: {$title}");
+
+                return;
+            }
+
             $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'exists, kept');
 
             return;
@@ -62,16 +83,23 @@ class Install extends Command
     protected function ensureBlueprint(string $collection, string $handle, string $courses, string $lessons): void
     {
         $namespace = 'collections.'.$collection;
-
-        if (Blueprint::find($namespace.'.'.$handle) && ! $this->option('force')) {
-            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'exists, kept');
-
-            return;
-        }
+        $existing = Blueprint::find($namespace.'.'.$handle);
 
         $contents = YAML::parse((string) file_get_contents(__DIR__.'/../../../resources/blueprints/'.$handle.'.yaml'));
         $contents = $this->localize($this->pointEntriesFieldsAt($contents, $courses, $lessons));
         $contents = $this->pointAssetsFieldsAt($contents);
+
+        if ($existing && $this->option('merge') && ! $this->option('force')) {
+            $this->mergeInto($existing, $contents, $handle);
+
+            return;
+        }
+
+        if ($existing && ! $this->option('force')) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'exists, kept');
+
+            return;
+        }
 
         Blueprint::make($handle)
             ->setNamespace($namespace)
@@ -79,6 +107,163 @@ class Install extends Command
             ->save();
 
         $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'written');
+    }
+
+    /**
+     * Adds what the shipped blueprint has and the existing one lacks.
+     *
+     * A missing field goes into the existing section that holds the field it
+     * follows in the shipped blueprint; failing that, into an existing section
+     * of the same name; failing that, a new section with the shipped name at
+     * the end of the first tab. A select the site already has keeps its
+     * options and gains only the missing ones. Nothing is removed, reordered
+     * or reconfigured.
+     *
+     * @param  array<string, mixed>  $shipped
+     */
+    protected function mergeInto(\Statamic\Fields\Blueprint $existing, array $shipped, string $handle): void
+    {
+        $contents = $existing->contents();
+        $contents['tabs'] ??= [];
+        $added = [];
+        $options = [];
+
+        foreach ($shipped['tabs'] ?? [] as $shippedTab) {
+            foreach ($shippedTab['sections'] ?? [] as $shippedSection) {
+                $previous = null;
+
+                foreach ($shippedSection['fields'] ?? [] as $field) {
+                    $fieldHandle = $field['handle'] ?? null;
+
+                    if (! is_string($fieldHandle)) {
+                        continue;
+                    }
+
+                    $at = $this->locateField($contents, $fieldHandle);
+
+                    // hasField() also sees fields a fieldset import brings in,
+                    // which the raw contents do not list.
+                    if ($at !== null || $existing->hasField($fieldHandle)) {
+                        if ($at !== null) {
+                            $options = [...$options, ...$this->mergeOptions($contents, $at, $field)];
+                            $previous = $fieldHandle;
+                        }
+
+                        continue;
+                    }
+
+                    $contents = $this->insertField($contents, $field, $previous, $shippedSection['display'] ?? null);
+                    $added[] = $fieldHandle;
+                    $previous = $fieldHandle;
+                }
+            }
+        }
+
+        foreach ($added as $fieldHandle) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", "+ {$fieldHandle}");
+        }
+
+        foreach ($options as $option) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", "+ option {$option}");
+        }
+
+        if ($added === [] && $options === []) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'up to date');
+
+            return;
+        }
+
+        if ($this->option('dry-run')) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'dry run, not saved');
+
+            return;
+        }
+
+        $existing->setContents($contents)->save();
+    }
+
+    /**
+     * @param  array<string, mixed>  $contents
+     * @return array{0: int|string, 1: int, 2: int}|null tab key, section index, field index
+     */
+    protected function locateField(array $contents, string $handle): ?array
+    {
+        foreach ($contents['tabs'] as $tabKey => $tab) {
+            foreach ($tab['sections'] ?? [] as $s => $section) {
+                foreach ($section['fields'] ?? [] as $f => $field) {
+                    if (($field['handle'] ?? null) === $handle) {
+                        return [$tabKey, $s, $f];
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $contents
+     * @param  array<string, mixed>  $field
+     * @return array<string, mixed>
+     */
+    protected function insertField(array $contents, array $field, ?string $after, mixed $sectionDisplay): array
+    {
+        $at = $after !== null ? $this->locateField($contents, $after) : null;
+
+        if ($at !== null) {
+            [$tabKey, $s, $f] = $at;
+            array_splice($contents['tabs'][$tabKey]['sections'][$s]['fields'], $f + 1, 0, [$field]);
+
+            return $contents;
+        }
+
+        foreach ($contents['tabs'] as $tabKey => $tab) {
+            foreach ($tab['sections'] ?? [] as $s => $section) {
+                if ($sectionDisplay !== null && ($section['display'] ?? null) === $sectionDisplay) {
+                    $contents['tabs'][$tabKey]['sections'][$s]['fields'][] = $field;
+
+                    return $contents;
+                }
+            }
+        }
+
+        $tabKey = array_key_first($contents['tabs']) ?? 'main';
+        $contents['tabs'][$tabKey]['sections'] ??= [];
+        $contents['tabs'][$tabKey]['sections'][] = array_filter([
+            'display' => $sectionDisplay,
+            'fields' => [$field],
+        ], fn ($value) => $value !== null);
+
+        return $contents;
+    }
+
+    /**
+     * @param  array<string, mixed>  $contents
+     * @param  array{0: int|string, 1: int, 2: int}  $at
+     * @param  array<string, mixed>  $shipped
+     * @return list<string> the options added, as handle.key
+     */
+    protected function mergeOptions(array &$contents, array $at, array $shipped): array
+    {
+        [$tabKey, $s, $f] = $at;
+        $current = &$contents['tabs'][$tabKey]['sections'][$s]['fields'][$f];
+        $shippedOptions = $shipped['field']['options'] ?? null;
+
+        if (($current['field']['type'] ?? null) !== 'select' || ($shipped['field']['type'] ?? null) !== 'select'
+            || ! is_array($shippedOptions) || ! is_array($current['field']['options'] ?? null)) {
+            return [];
+        }
+
+        $added = [];
+
+        foreach ($shippedOptions as $key => $label) {
+            if (! array_key_exists($key, $current['field']['options'])) {
+                $current['field']['options'][$key] = $label;
+                $added[] = $shipped['handle'].'.'.$key;
+            }
+        }
+
+        return $added;
     }
 
     /**
@@ -150,12 +335,44 @@ class Install extends Command
      */
     protected function pointAssetsFieldsAt(array $contents): array
     {
+        // The private download's own field picks from statamic-private-media's
+        // container, so a public and a private file can sit side by side and
+        // a private one cannot be picked from a public container. Without that
+        // addon (or its container) the toggle and the field are left out.
+        $privateHandle = config('private-media.source.container');
+        $private = class_exists(LessonBlocks::PRIVATE_MEDIA) && is_string($privateHandle) && AssetContainer::find($privateHandle)
+            ? $privateHandle
+            : null;
+
+        // The public field never defaults to the private container: files
+        // there are not reachable by URL.
         $configured = config('courses.downloads.container');
         $container = is_string($configured) && $configured !== '' && AssetContainer::find($configured)
             ? $configured
-            : AssetContainer::all()->first()?->handle();
+            : AssetContainer::all()->reject(fn ($c) => $c->handle() === $private)->first()?->handle();
 
-        $walk = function (array $node) use (&$walk, $container): array {
+        $walk = function (array $node) use (&$walk, $container, $private): array {
+            if (array_is_list($node) && collect($node)->contains(fn ($item) => is_array($item) && ($item['field']['container'] ?? null) === '@private-media')) {
+                $node = $private === null
+                    ? array_values(array_filter($node, fn ($item) => ! in_array($item['handle'] ?? null, ['private', 'private_file'], true)))
+                    : array_map(function ($item) use ($private) {
+                        if (is_array($item) && ($item['field']['container'] ?? null) === '@private-media') {
+                            $item['field']['container'] = $private;
+                        }
+
+                        return $item;
+                    }, $node);
+
+                if ($private === null) {
+                    // The public field no longer depends on a toggle that is gone.
+                    $node = array_map(function ($item) {
+                        unset($item['field']['unless']);
+
+                        return $item;
+                    }, $node);
+                }
+            }
+
             if (($node['type'] ?? null) === 'assets' && ! isset($node['container'])) {
                 if ($container !== null) {
                     $node['container'] = $container;

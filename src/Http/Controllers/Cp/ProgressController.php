@@ -2,9 +2,11 @@
 
 namespace Goldnead\Courses\Http\Controllers\Cp;
 
+use Goldnead\Courses\CourseProgress;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonState;
 use Goldnead\Courses\Support\ProgressReport;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -53,7 +55,49 @@ class ProgressController extends CpController
             'locale' => str_replace('_', '-', app()->getLocale()),
             'collectionUrl' => $hasCollection ? cp_route('collections.show', $handle) : null,
             'stuckHelp' => __('courses::cp.stuck_help', ['days' => $report->stuckAfterDays()]),
+            // Payment holds (K5): who is shut out or paused, and since when.
+            'holds' => collect(app(CourseProgress::class)->holds())
+                ->map(fn (array $hold): array => [
+                    ...$hold,
+                    'release_url' => cp_route('courses.holds.release', $hold['enrollment_id']),
+                ])
+                ->all(),
+            'holdColumns' => collect($this->holdColumns())->map->toArray()->all(),
+            'canRelease' => Gate::allows('manage course holds'),
         ]);
+    }
+
+    /**
+     * Lifts a learner's payment hold and restarts a paused drip, as a paid
+     * renewal would. For support: the money arrived another way, or the hold
+     * was a mistake.
+     */
+    public function release(int $enrollment): RedirectResponse
+    {
+        Gate::authorize('manage course holds');
+
+        $row = Enrollment::query()->findOrFail($enrollment);
+        $course = collect(app(CourseProgress::class)->courses())->firstWhere('id', $row->course_entry_id);
+
+        abort_if($course === null, 404);
+
+        app(CourseProgress::class)->paymentRecovered($row->user_id, $course['slug'], null, 'released_in_cp');
+
+        return back()->with('success', __('courses::cp.hold_released'));
+    }
+
+    /**
+     * @return list<Column>
+     */
+    protected function holdColumns(): array
+    {
+        return [
+            Column::make('email')->label(__('courses::cp.col_learner')),
+            Column::make('course_title')->label(__('courses::cp.col_title')),
+            Column::make('kind')->label(__('courses::cp.col_hold')),
+            Column::make('since')->label(__('courses::cp.col_since')),
+            Column::make('subscription_id')->label(__('courses::cp.col_subscription')),
+        ];
     }
 
     /**
