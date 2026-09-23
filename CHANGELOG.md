@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-09-23)
+
+### Fixed
+- Sites without statamic-private-media crashed at boot ("Interface
+  Goldnead\PrivateMedia\Contracts\MediaAccess not found"). The service provider now checks for the
+  interface by name before it touches the class that implements it, and the lesson blocks tag no
+  longer loads that class either. A boot test runs in its own process without the test fakes.
+
 ## 0.2.0 (2026-09-23)
 
 ### Upgrading

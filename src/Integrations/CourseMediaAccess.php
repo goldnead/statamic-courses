@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Integrations;
 
 use Goldnead\Courses\CourseProgress;
+use Goldnead\Courses\Support\LessonBlocks;
 use Goldnead\PrivateMedia\Contracts\MediaAccess;
 
 /**
@@ -18,20 +19,18 @@ use Goldnead\PrivateMedia\Contracts\MediaAccess;
  */
 class CourseMediaAccess implements MediaAccess
 {
-    public const PREFIX = 'course:';
+    public const PREFIX = LessonBlocks::RESOURCE_PREFIX;
 
-    public const CONTRACT = 'Goldnead\\PrivateMedia\\Contracts\\MediaAccess';
-
+    /*
+     * Nothing static here that the rest of the addon calls: loading this
+     * class needs private-media's interface. The provider checks for it by
+     * name (ServiceProvider::PRIVATE_MEDIA_ACCESS) before it touches the class.
+     */
     public function __construct(protected MediaAccess $inner) {}
-
-    public static function available(): bool
-    {
-        return interface_exists(self::CONTRACT);
-    }
 
     public static function resourceFor(string $courseSlug): string
     {
-        return self::PREFIX.$courseSlug;
+        return LessonBlocks::resourceFor($courseSlug);
     }
 
     public function allows(mixed $user, string $resource, string $path): bool

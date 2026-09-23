@@ -35,6 +35,9 @@ class ServiceProvider extends AddonServiceProvider
      */
     public const SUITE_NAV = '\Goldnead\StatamicPayments\Cp\SuiteNav';
 
+    /** statamic-private-media's access contract, by name only. */
+    public const PRIVATE_MEDIA_ACCESS = 'Goldnead\\PrivateMedia\\Contracts\\MediaAccess';
+
     /**
      * `courses::blocks.download`, not the package name core would pick.
      */
@@ -56,8 +59,13 @@ class ServiceProvider extends AddonServiceProvider
         // private-media asks the course about a course's private downloads.
         // `extend`, not `bind`: the site's own MediaAccess, or private-media's
         // default, stays in charge of every other resource.
-        if (CourseMediaAccess::available()) {
-            $this->app->extend(CourseMediaAccess::CONTRACT, fn ($inner) => new CourseMediaAccess($inner));
+        //
+        // Checked by name, never through CourseMediaAccess: that class
+        // implements private-media's interface, so touching it (even a
+        // constant) loads it, and without private-media that is a fatal
+        // "Interface not found" at boot (0.2.0).
+        if (interface_exists(self::PRIVATE_MEDIA_ACCESS)) {
+            $this->app->extend(self::PRIVATE_MEDIA_ACCESS, fn ($inner) => new CourseMediaAccess($inner));
         }
 
         // Bound by class name, never under a short slug: a container key named

@@ -37,6 +37,18 @@ class LessonBlocks
 {
     public const PRIVATE_MEDIA = 'Goldnead\\PrivateMedia\\PrivateMedia';
 
+    /** What a private download is signed for, and what CourseMediaAccess answers. */
+    public const RESOURCE_PREFIX = 'course:';
+
+    /**
+     * Here, not on CourseMediaAccess: that class implements private-media's
+     * interface, and loading it without private-media is a fatal error.
+     */
+    public static function resourceFor(string $courseSlug): string
+    {
+        return self::RESOURCE_PREFIX.$courseSlug;
+    }
+
     /**
      * @param  string|null  $resource  what a private download is signed for: `course:<slug>`, which
      *                                 CourseMediaAccess answers with Courses::canAccess()

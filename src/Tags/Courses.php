@@ -3,7 +3,6 @@
 namespace Goldnead\Courses\Tags;
 
 use Goldnead\Courses\CourseProgress;
-use Goldnead\Courses\Integrations\CourseMediaAccess;
 use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\LessonBlocks;
 use Illuminate\Support\Facades\Route;
@@ -174,7 +173,7 @@ class Courses extends Tags
 
         [$entry, $course, $user] = $readable;
 
-        $blocks = app(LessonBlocks::class)->for($entry, $user, CourseMediaAccess::resourceFor($course['slug']));
+        $blocks = app(LessonBlocks::class)->for($entry, $user, LessonBlocks::resourceFor($course['slug']));
 
         if ($blocks === []) {
             return '';
