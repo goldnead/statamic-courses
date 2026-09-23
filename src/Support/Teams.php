@@ -133,7 +133,7 @@ class Teams
                 continue;
             }
 
-            TeamMemberAdded::dispatch($ownerId, $course['id'], $course['slug'], $email, $product);
+            TeamMemberAdded::dispatch($ownerId, $course['id'], $course['slug'], $email, $product, CourseBrand::forEvent($course));
 
             return $member;
         }
@@ -161,7 +161,7 @@ class Teams
             ->delete();
 
         if ($deleted > 0) {
-            TeamMemberRemoved::dispatch($ownerId, $course['id'], $course['slug'], $email, $product);
+            TeamMemberRemoved::dispatch($ownerId, $course['id'], $course['slug'], $email, $product, CourseBrand::forEvent($course));
         }
 
         return $deleted > 0;

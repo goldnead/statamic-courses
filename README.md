@@ -165,7 +165,10 @@ player's; the player's number counts only when the entry has none.
 Events: `LessonCompleted` on every transition to completed (with its source), `CourseCompleted` once
 per learner and course, `LearnerEnrolled`, `LessonUnlocked` (for unlocks a write caused),
 `QuizPassed`, `QuizFailed`, `DripPaused`, `DripResumed`, `CourseAccessSuspended`,
-`CourseAccessRestored`, `TeamMemberAdded`, `TeamMemberRemoved`. Every start, quarter mark and completion is logged to
+`CourseAccessRestored`, `TeamMemberAdded`, `TeamMemberRemoved`. Every event carries `brandId` (null without statamic-brand-context): the
+course's brand (its `brand` field, else the brand `brand-context.sites` gives its site), else the
+brand current when it fired, so a listener started from a webhook runs in the right brand.
+`Courses::courses($brandId)` lists one brand's courses plus those without a brand. Every start, quarter mark and completion is logged to
 `courses_lesson_events`. All tables carry the `courses_` prefix.
 
 ## Antlers

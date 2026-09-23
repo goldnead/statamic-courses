@@ -144,3 +144,9 @@ tabs:
               required: true
               validate:
                 - required
+          -
+            handle: brand
+            field:
+              type: text
+              display: Brand
+              instructions: 'Multi-brand sites only: the handle of the brand this course belongs to. Empty: the brand of its site.'

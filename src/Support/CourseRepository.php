@@ -100,6 +100,8 @@ class CourseRepository
             // product lists itself on every course it contains.
             'bundles' => array_values(array_diff($this->strings($entry->get('bundles')), [$product !== '' ? $product : (string) $entry->slug()])),
             'team_seats' => max(0, (int) ($entry->get('team_seats') ?? 0)),
+            // Multi-brand sites: the `brand` field, else the brand of the entry's site.
+            'brand_id' => CourseBrand::ofEntry($entry),
             'section_audiences' => collect(is_array($entry->get('section_audiences')) ? $entry->get('section_audiences') : [])
                 ->filter(fn ($row): bool => is_array($row) && trim((string) ($row['section_key'] ?? '')) !== '')
                 ->mapWithKeys(fn (array $row): array => [

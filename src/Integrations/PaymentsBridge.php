@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Integrations;
 
 use Goldnead\Courses\CourseProgress;
+use Goldnead\Courses\Support\CourseBrand;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Auth\User as StatamicUser;
@@ -151,7 +152,10 @@ class PaymentsBridge
             }
 
             try {
-                $callback($learner, $course['slug']);
+                // In the subscription's brand: a webhook has none current, and
+                // the events this fires would otherwise land in the default brand
+                // for a course that has no brand of its own.
+                $this->inBrand($subscription->brand_id ?? null, fn () => $callback($learner, $course['slug']));
             } catch (Throwable $e) {
                 // One course must not keep the others from hearing about the
                 // payment; the failure is loud, not swallowed.
@@ -162,6 +166,17 @@ class PaymentsBridge
                 ]);
             }
         }
+    }
+
+    protected function inBrand(mixed $brandId, callable $callback): void
+    {
+        if (is_numeric($brandId) && CourseBrand::available()) {
+            app('brand-context')->runFor((int) $brandId, fn () => $callback());
+
+            return;
+        }
+
+        $callback();
     }
 
     /**

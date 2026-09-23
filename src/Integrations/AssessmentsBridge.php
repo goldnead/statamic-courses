@@ -5,6 +5,7 @@ namespace Goldnead\Courses\Integrations;
 use Goldnead\Courses\CourseProgress;
 use Goldnead\Courses\Events\QuizFailed;
 use Goldnead\Courses\Events\QuizPassed;
+use Goldnead\Courses\Support\CourseBrand;
 use Goldnead\Courses\Support\LearnerId;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Auth\User as StatamicUser;
@@ -149,7 +150,7 @@ class AssessmentsBridge
             ];
 
             $passed = self::passes($lesson, $result['score'], $result['result_key']);
-            $args = [LearnerId::of($learner), $course['id'], $course['slug'], $lesson['slug'], $handle, $result['score'], $result['result_key'], $result['response_id']];
+            $args = [LearnerId::of($learner), $course['id'], $course['slug'], $lesson['slug'], $handle, $result['score'], $result['result_key'], $result['response_id'], CourseBrand::forEvent($course)];
 
             if ($passed) {
                 $this->courses->completeLesson($learner, $course['slug'], $lesson['slug'], 'assessment', [...$payload, 'passed' => true]);

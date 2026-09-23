@@ -30,6 +30,10 @@
 - A hold set by hand is absolute: no grant, team seat, renewal or purchase gets past it; only
   `restoreAccess()` or the Control Panel lifts it.
 - `courses:install --dry-run` saves nothing, also on a fresh site ("would create").
+- Every event carries `?int $brandId` (last, optional constructor parameter): the course's brand
+  (its `brand` field, else the brand of its site), else the brand current when it fires. The
+  payments bridge fires in the subscription's brand. `Courses::courses($brandId)` lists one
+  brand's courses and those without a brand.
 - Events `LearnerEnrolled`, `LessonUnlocked`, `QuizPassed`, `QuizFailed`, `DripPaused`,
   `DripResumed`, `CourseAccessSuspended`, `CourseAccessRestored`, `TeamMemberAdded`,
   `TeamMemberRemoved`.

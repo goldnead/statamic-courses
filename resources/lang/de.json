@@ -44,6 +44,8 @@
     "Prerequisites": "Voraussetzungen",
     "This lesson opens only after all of these are completed.": "Diese Lektion öffnet erst, wenn alle diese abgeschlossen sind.",
     "Bundles": "Pakete",
+    "Brand": "Marke",
+    "Multi-brand sites only: the handle of the brand this course belongs to. Empty: the brand of its site.": "Nur bei mehreren Marken: der Handle der Marke, zu der dieser Kurs gehört. Leer: die Marke seiner Site.",
     "Further products that open this course, for a bundle sold as one product.": "Weitere Produkte, die diesen Kurs öffnen. Für ein Paket, das als ein Produkt verkauft wird.",
     "When a lesson opens. Each lesson says when under Drip.": "Wann eine Lektion öffnet. Den Zeitpunkt trägt jede Lektion unter Freischaltung.",
     "By days, from enrollment": "Nach Tagen ab Einschreibung",

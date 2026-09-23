@@ -19,6 +19,7 @@ use Goldnead\Courses\Models\TeamMember;
 use Goldnead\Courses\Progress\LessonProgress;
 use Goldnead\Courses\Progress\LockResolver;
 use Goldnead\Courses\Support\Audience;
+use Goldnead\Courses\Support\CourseBrand;
 use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\EventRecorder;
 use Goldnead\Courses\Support\Holds;
@@ -69,13 +70,30 @@ class CourseProgress
     }
 
     /**
-     * Every course, in title order.
+     * Every course, in title order. With `$brandId`, only that brand's
+     * courses and those without a brand: the list a picker of one brand
+     * offers (an automation's course filter, say).
      *
      * @return list<array<string, mixed>>
      */
-    public function courses(): array
+    public function courses(?int $brandId = null): array
     {
-        return $this->courses->allCourses();
+        $courses = $this->courses->allCourses();
+
+        if ($brandId === null) {
+            return $courses;
+        }
+
+        return array_values(array_filter(
+            $courses,
+            fn (array $course): bool => $course['brand_id'] === null || $course['brand_id'] === $brandId,
+        ));
+    }
+
+    /** The brand an event about this course carries. */
+    protected function brandOf(string $courseSlug): ?int
+    {
+        return CourseBrand::forEvent($this->courses->findCourse($courseSlug));
     }
 
     /**
@@ -140,7 +158,7 @@ class CourseProgress
         );
 
         if ($enrollment->wasRecentlyCreated) {
-            LearnerEnrolled::dispatch($enrollment->user_id, $course['id'], $course['slug']);
+            LearnerEnrolled::dispatch($enrollment->user_id, $course['id'], $course['slug'], CourseBrand::forEvent($course));
         }
 
         return $enrollment;
@@ -179,7 +197,7 @@ class CourseProgress
         });
 
         if ($paused && $enrollment !== null) {
-            DripPaused::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+            DripPaused::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason, $this->brandOf($courseSlug));
         }
 
         return $enrollment;
@@ -202,7 +220,7 @@ class CourseProgress
         });
 
         if ($seconds !== null && $enrollment !== null) {
-            DripResumed::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $seconds, $reason);
+            DripResumed::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $seconds, $reason, $this->brandOf($courseSlug));
         }
 
         return $enrollment;
@@ -234,7 +252,7 @@ class CourseProgress
         });
 
         if ($suspended && $enrollment !== null) {
-            CourseAccessSuspended::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+            CourseAccessSuspended::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason, $this->brandOf($courseSlug));
         }
 
         return $enrollment;
@@ -254,7 +272,7 @@ class CourseProgress
         });
 
         if ($restored && $enrollment !== null) {
-            CourseAccessRestored::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+            CourseAccessRestored::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason, $this->brandOf($courseSlug));
         }
 
         return $enrollment;
@@ -1083,7 +1101,7 @@ class CourseProgress
 
         foreach ($written as [$state, $previousStatus]) {
             if ($state->status === LessonStatus::Completed->value && $previousStatus !== LessonStatus::Completed->value) {
-                LessonCompleted::dispatch($state, $source);
+                LessonCompleted::dispatch($state, $source, CourseBrand::forEvent($context['course']));
                 $anyCompleted = true;
             }
         }
@@ -1111,7 +1129,7 @@ class CourseProgress
             $slug = $lesson['slug'];
 
             if (($before['locks'][$slug] ?? false) && ! ($after['locks'][$slug] ?? false)) {
-                LessonUnlocked::dispatch($after['user_id'], $after['course']['id'], $after['course']['slug'], $slug, $source);
+                LessonUnlocked::dispatch($after['user_id'], $after['course']['id'], $after['course']['slug'], $slug, $source, CourseBrand::forEvent($after['course']));
             }
         }
     }
@@ -1172,7 +1190,7 @@ class CourseProgress
             return;
         }
 
-        CourseCompleted::dispatch($context['user_id'], $context['course']['id'], $context['course']['slug']);
+        CourseCompleted::dispatch($context['user_id'], $context['course']['id'], $context['course']['slug'], CourseBrand::forEvent($context['course']));
     }
 
     protected function threshold(): int
