@@ -12,3 +12,8 @@ if (! config('courses.cp.enabled', true)) {
 Route::get('courses/progress', [ProgressController::class, 'index'])
     ->middleware('can:view course progress')
     ->name('courses.progress.index');
+
+Route::post('courses/holds/{enrollment}/release', [ProgressController::class, 'release'])
+    ->whereNumber('enrollment')
+    ->middleware('can:manage course holds')
+    ->name('courses.holds.release');
