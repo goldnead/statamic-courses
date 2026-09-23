@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Lesson blocks: text, callout, columns, FAQ, video, download (optionally signed by
+  statamic-private-media) and button, rendered by `{{ courses:blocks }}` with overridable
+  partials. The markdown `content` stays and renders first.
+- Drip modes `days`, `date`, `day_of_month`, `payments` and `after_trial` (lesson fields
+  `drip_after`, `drip_date`; course field `drip_day_of_month`), `Courses::recordBilling()`.
+- Lessons and sections limited to entitlements, user groups, LeadHub tags or LeadHub segments.
+- Quiz lessons from statamic-assessments: a pass completes the lesson, a fail records the attempt.
+  `{{ courses:quiz }}`.
+- `on_payment_failure` per course (`keep`, `pause_drip`, `revoke`), applied from
+  statamic-payments' subscription events; pause, resume, suspend and restore in the facade.
+- Bundles on the course (`bundles`) and team seats (`team_seats`, `courses_team_members`,
+  `POST /!/courses/team`, `{{ courses:team }}`, `{{ courses:team_form }}`).
+- Events `LearnerEnrolled`, `LessonUnlocked`, `QuizPassed`, `QuizFailed`, `DripPaused`,
+  `DripResumed`, `CourseAccessSuspended`, `CourseAccessRestored`, `TeamMemberAdded`,
+  `TeamMemberRemoved`.
+- Config `downloads.container`.
+
+### Changed
+- Two migrations: billing and hold columns on `courses_enrollments`, table
+  `courses_team_members`. Run `php artisan migrate`, then `courses:install --force` for the new
+  blueprint fields.
+- `courses:install` writes an asset container into the download field.
+- A lesson locked by the drip reports its drip reason first, also before the learner enrolled.
+
 ## 0.1.2 (2026-09-23)
 
 ### Fixed

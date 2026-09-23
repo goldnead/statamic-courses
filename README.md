@@ -31,8 +31,12 @@ routes as you like, `url` is then null and nothing breaks.
 
 ## Structure
 
-A **course** entry carries `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (`none`,
-`schedule`) and `product`, the entitlements product that opens it (defaults to the course slug).
+A **course** entry carries `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (see
+below) and `product`, the entitlements product that opens it (defaults to the course slug), plus
+`bundles`, `team_seats`, `on_payment_failure` and `section_audiences`.
+
+Upgrading from 0.1: run `php artisan migrate`, then `php artisan courses:install --force` to get
+the new fields. `--force` rewrites both blueprints; fields you added by hand must be added again.
 
 A **lesson** entry points at its course (`course`) and orders itself with `section_key`,
 `section_order` and `sort_order`. Optional: `phase_key` / `phase_order` (later phases wait for
@@ -54,11 +58,67 @@ earlier ones), `is_test_out`, `week` (with schedule drip), `prerequisite_lessons
 2. Its prerequisites, until each is completed.
 3. Its phase, until every earlier phase is completed. A test-out lesson stays open; completing it
    completes the earlier phases as `skipped`.
-4. With `drip_mode: schedule`, its week: week *n* opens `(n − 1) × 7` days after enrollment, or
-   earlier if the learner was moved on with `advanceToWeek()`.
+4. The course's drip (`drip_mode`), with the lesson field it reads:
+
+   | `drip_mode` | Lesson field | Opens |
+   |---|---|---|
+   | `schedule` | `week` | week *n* opens `(n − 1) × 7` days after enrollment, or earlier with `advanceToWeek()` |
+   | `days` | `drip_after` | *n* days after enrollment |
+   | `date` | `drip_date` | on that day, site timezone |
+   | `day_of_month` | `drip_after` | the *n*th time the course's `drip_day_of_month` comes round, the enrollment day included |
+   | `payments` | `drip_after` | once *n* payments went through (the first included) |
+   | `after_trial` | `drip_after` ≥ 1 | once the first charge after a trial went through; at once without a trial |
+
+   Payments are recorded by the statamic-payments bridge (Stripe and Mollie alike) or by
+   `Courses::recordBilling()`. A lesson without the field opens at once.
 
 A completed lesson is never locked. Writes to a locked lesson are refused. Each locked lesson
-carries a `lock_reason`: `schedule`, `prerequisite`, `phase` or `sequence`.
+carries a `lock_reason`: `schedule`, `payment`, `paused`, `prerequisite`, `phase` or `sequence`.
+
+## Who sees a lesson
+
+A lesson (`audience_entitlements`, `audience_groups`, `audience_tags`, `audience_segments`) or a
+whole section (the course's `section_audiences`) can be limited to some learners: product
+handles, Statamic user groups, LeadHub tags, LeadHub segments. One match is enough. For everybody
+else the lesson is not part of the course: it is not listed, not counted, and does not lock the
+path. Tags and segments need statamic-leadhub; without it such a rule matches nobody.
+
+## When a payment fails
+
+`on_payment_failure` on the course, applied when statamic-payments reports a failed cycle
+(`SubscriptionCycleFailed`) and lifted on the next renewal:
+
+- `keep` (default): nothing; access runs out at the end of the paid period, as entitlements has it.
+- `pause_drip`: the drip clock stops. Afterwards every relative release date moves on by the
+  length of the pause.
+- `revoke`: the course is closed for the learner until the payment arrives.
+
+Without payments: `Courses::paymentFailed()`, `paymentRecovered()`, `pauseDrip()`,
+`resumeDrip()`, `suspendAccess()`, `restoreAccess()`.
+
+## Bundles and teams
+
+A course opens for its `product` and for every product listed under `bundles`: sell one bundle
+product and list it on each course it contains. (A PackageResolver in entitlements works as well.)
+
+`team_seats` lets a buyer add that many people by email (`Courses::addTeamMember()`, the
+`courses:team_form` tag). A member gets in with that address for as long as the buyer holds the
+course. statamic-entitlements has no seats of its own yet; the team lives in
+`courses_team_members`.
+
+## Lesson content
+
+Besides the markdown `content` (kept, rendered first), a lesson has `blocks`: text, callout,
+columns, FAQ, video (YouTube and Vimeo become players), download and button. A download marked
+“only for learners of this course” is served through a signed link by statamic-private-media,
+signed for the course product; without that addon it is left out. `courses:install` points the
+download field at `courses.downloads.container` or the first asset container.
+
+## Quiz
+
+A quiz lesson names a statamic-assessments questionnaire (`assessment`) and optionally
+`pass_score` and `pass_levels`. When the signed-in learner submits it, a pass completes the lesson
+(source `assessment`, opening whatever waited on it) and a fail records the attempt.
 
 ## Usage
 
@@ -85,7 +145,9 @@ player's; the player's number counts only when the entry has none.
 `canAccess()` first.
 
 Events: `LessonCompleted` on every transition to completed (with its source), `CourseCompleted` once
-per learner and course. Every start, quarter mark and completion is logged to
+per learner and course, `LearnerEnrolled`, `LessonUnlocked` (for unlocks a write caused),
+`QuizPassed`, `QuizFailed`, `DripPaused`, `DripResumed`, `CourseAccessSuspended`,
+`CourseAccessRestored`, `TeamMemberAdded`, `TeamMemberRemoved`. Every start, quarter mark and completion is logged to
 `courses_lesson_events`. All tables carry the `courses_` prefix.
 
 ## Antlers
@@ -108,7 +170,20 @@ All tags work for the signed-in learner. Without access to the course they rende
 {{ courses:form course="cvt-101" lesson="reading" do="acknowledge" redirect="/courses/cvt-101" }}
     <button>Mark as read</button>
 {{ /courses:form }}
+
+{{# on a lesson page #}}
+{{ courses:blocks }}
+{{ courses:quiz }}{{ if passed }}Passed{{ else }}<a href="{{ url }}">Take the quiz</a>{{ /if }}{{ /courses:quiz }}
+
+{{ courses:team course="cvt-101" }}{{ left }} of {{ seats }} seats free{{ /courses:team }}
+{{ courses:team_form course="cvt-101" }}<input type="email" name="email"> <button>Add</button>{{ /courses:team_form }}
 ```
+
+`courses:blocks` renders the shipped partials (override one at
+`resources/views/vendor/courses/blocks/{type}.antlers.html`) or, as a pair, hands over the blocks.
+It renders nothing for a lesson that is locked or hidden for the learner; super users see every
+lesson. `courses:team_form` posts to `POST /!/courses/team` (`action` `add` or `remove`, `email`);
+refusals: `not_owner` (403), `no_seat` (422).
 
 `courses:form` posts to `POST /!/courses/progress` (fields `course`, `lesson`, `action` =
 `complete`, `incomplete`, `acknowledge` or `progress`, plus `watched_seconds` / `resume_seconds`).

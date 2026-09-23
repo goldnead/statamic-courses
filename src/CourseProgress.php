@@ -2,17 +2,28 @@
 
 namespace Goldnead\Courses;
 
+use Carbon\CarbonInterface;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Enums\LessonStatus;
+use Goldnead\Courses\Events\CourseAccessRestored;
+use Goldnead\Courses\Events\CourseAccessSuspended;
 use Goldnead\Courses\Events\CourseCompleted;
+use Goldnead\Courses\Events\DripPaused;
+use Goldnead\Courses\Events\DripResumed;
+use Goldnead\Courses\Events\LearnerEnrolled;
 use Goldnead\Courses\Events\LessonCompleted;
+use Goldnead\Courses\Events\LessonUnlocked;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonState;
+use Goldnead\Courses\Models\TeamMember;
 use Goldnead\Courses\Progress\LessonProgress;
 use Goldnead\Courses\Progress\LockResolver;
+use Goldnead\Courses\Support\Audience;
 use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\EventRecorder;
 use Goldnead\Courses\Support\LearnerId;
+use Goldnead\Courses\Support\Teams;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -40,6 +51,8 @@ class CourseProgress
         protected LockResolver $locks,
         protected EventRecorder $events,
         protected CourseAccess $access,
+        protected Audience $audience,
+        protected Teams $teams,
     ) {}
 
     /**
@@ -60,15 +73,33 @@ class CourseProgress
         return $this->courses->allCourses();
     }
 
+    /**
+     * Whether the learner may be in the course at all.
+     *
+     * Yes when the bound CourseAccess says so for the course's product or any
+     * of its `bundles`, or when a buyer put the learner on their team (K6).
+     * No, whatever those say, while the course is suspended for this learner
+     * after a failed payment (K5, `on_payment_failure: revoke`).
+     */
     public function canAccess(mixed $user, string $courseSlug): bool
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        return $course !== null && $user !== null && $this->access->allows($user, $course);
+        if ($course === null || $user === null) {
+            return false;
+        }
+
+        if ($this->isSuspended($user, $course)) {
+            return false;
+        }
+
+        return $this->access->allows($user, $course)
+            || $this->teams->grantsAccess($user, $course);
     }
 
     /**
-     * Starts the clock for the schedule drip. Enrolling twice keeps the first date.
+     * Starts the clock for the drip. Enrolling twice keeps the first date.
+     * LearnerEnrolled fires once, for the call that created the row.
      */
     public function enroll(mixed $user, string $courseSlug): ?Enrollment
     {
@@ -78,10 +109,220 @@ class CourseProgress
             return null;
         }
 
-        return Enrollment::query()->createOrFirst(
+        $enrollment = Enrollment::query()->createOrFirst(
             ['user_id' => LearnerId::of($user), 'course_entry_id' => $course['id']],
             ['current_week' => 1, 'started_at' => now()],
         );
+
+        if ($enrollment->wasRecentlyCreated) {
+            LearnerEnrolled::dispatch($enrollment->user_id, $course['id'], $course['slug']);
+        }
+
+        return $enrollment;
+    }
+
+    /**
+     * What the drip by payments counts (K2): how many payments went through,
+     * the first included, and when a trial ends. Written by the payments
+     * bridge on every start and renewal; callable by a site that bills
+     * elsewhere. The count never goes down.
+     */
+    public function recordBilling(mixed $user, string $courseSlug, int $payments, ?CarbonInterface $trialUntil = null): ?Enrollment
+    {
+        return $this->writeEnrollment($user, $courseSlug, 'billing', function (Enrollment $enrollment) use ($payments, $trialUntil): void {
+            $enrollment->payments_count = max((int) $enrollment->payments_count, $payments);
+
+            if ($trialUntil !== null) {
+                $enrollment->trial_until = Carbon::instance($trialUntil);
+            }
+        });
+    }
+
+    /**
+     * Stops the drip clock (K5, `pause_drip`). Pausing a paused drip keeps the
+     * first moment.
+     */
+    public function pauseDrip(mixed $user, string $courseSlug, string $reason = 'manual'): ?Enrollment
+    {
+        $paused = false;
+
+        $enrollment = $this->writeEnrollment($user, $courseSlug, 'drip_paused', function (Enrollment $enrollment) use (&$paused): void {
+            if ($enrollment->drip_paused_at === null) {
+                $enrollment->drip_paused_at = now();
+                $paused = true;
+            }
+        });
+
+        if ($paused && $enrollment !== null) {
+            DripPaused::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+        }
+
+        return $enrollment;
+    }
+
+    /**
+     * Starts the drip clock again. Every lesson relative to the enrollment
+     * opens later by as long as the pause lasted.
+     */
+    public function resumeDrip(mixed $user, string $courseSlug, string $reason = 'manual'): ?Enrollment
+    {
+        $seconds = null;
+
+        $enrollment = $this->writeEnrollment($user, $courseSlug, 'drip_resumed', function (Enrollment $enrollment) use (&$seconds): void {
+            if ($enrollment->drip_paused_at !== null) {
+                $seconds = max(0, (int) $enrollment->drip_paused_at->diffInSeconds(now(), true));
+                $enrollment->drip_paused_seconds = (int) $enrollment->drip_paused_seconds + $seconds;
+                $enrollment->drip_paused_at = null;
+            }
+        });
+
+        if ($seconds !== null && $enrollment !== null) {
+            DripResumed::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $seconds, $reason);
+        }
+
+        return $enrollment;
+    }
+
+    /**
+     * Shuts the course for this learner, whatever their entitlement says
+     * (K5, `revoke`). Undone by restoreAccess().
+     */
+    public function suspendAccess(mixed $user, string $courseSlug, string $reason = 'manual'): ?Enrollment
+    {
+        $suspended = false;
+
+        $enrollment = $this->writeEnrollment($user, $courseSlug, 'access_suspended', function (Enrollment $enrollment) use (&$suspended): void {
+            if ($enrollment->access_suspended_at === null) {
+                $enrollment->access_suspended_at = now();
+                $suspended = true;
+            }
+        });
+
+        if ($suspended && $enrollment !== null) {
+            CourseAccessSuspended::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+        }
+
+        return $enrollment;
+    }
+
+    public function restoreAccess(mixed $user, string $courseSlug, string $reason = 'manual'): ?Enrollment
+    {
+        $restored = false;
+
+        $enrollment = $this->writeEnrollment($user, $courseSlug, 'access_restored', function (Enrollment $enrollment) use (&$restored): void {
+            if ($enrollment->access_suspended_at !== null) {
+                $enrollment->access_suspended_at = null;
+                $restored = true;
+            }
+        });
+
+        if ($restored && $enrollment !== null) {
+            CourseAccessRestored::dispatch($enrollment->user_id, $enrollment->course_entry_id, $courseSlug, $reason);
+        }
+
+        return $enrollment;
+    }
+
+    /**
+     * A subscription payment for this course failed. Does what the course's
+     * `on_payment_failure` says: `keep` nothing (the paid period runs out on
+     * its own), `pause_drip` stops the drip, `revoke` shuts the course.
+     * Answers the mode that was applied.
+     */
+    public function paymentFailed(mixed $user, string $courseSlug): ?string
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        if ($course === null) {
+            return null;
+        }
+
+        match ($course['on_payment_failure']) {
+            'pause_drip' => $this->pauseDrip($user, $courseSlug, 'payment_failed'),
+            'revoke' => $this->suspendAccess($user, $courseSlug, 'payment_failed'),
+            default => null,
+        };
+
+        return $course['on_payment_failure'];
+    }
+
+    /**
+     * The money arrived after all: lift whatever paymentFailed() put in place.
+     * Both holds are lifted, not only the course's current mode, so a mode
+     * changed in between cannot strand a learner.
+     */
+    public function paymentRecovered(mixed $user, string $courseSlug): void
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        if ($course === null) {
+            return;
+        }
+
+        $enrollment = Enrollment::query()
+            ->where('user_id', LearnerId::of($user))
+            ->where('course_entry_id', $course['id'])
+            ->first();
+
+        if ($enrollment?->drip_paused_at !== null) {
+            $this->resumeDrip($user, $courseSlug, 'payment_recovered');
+        }
+
+        if ($enrollment?->access_suspended_at !== null) {
+            $this->restoreAccess($user, $courseSlug, 'payment_recovered');
+        }
+    }
+
+    /**
+     * Team access (K6). The owner is the buyer; members are kept by email.
+     * Refused (null) when the owner cannot open the course themselves, the
+     * course has no seats, or every seat is taken.
+     */
+    public function addTeamMember(mixed $owner, string $courseSlug, string $email): ?TeamMember
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        return $course === null || ! $this->ownsCourse($owner, $course) ? null : $this->teams->add($owner, $course, $email);
+    }
+
+    public function removeTeamMember(mixed $owner, string $courseSlug, string $email): bool
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        return $course !== null && $this->teams->remove($owner, $course, $email);
+    }
+
+    /**
+     * @return array{seats: int, used: int, left: int, members: list<array{email: string, added_at: string|null}>}|null
+     */
+    public function team(mixed $owner, string $courseSlug): ?array
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        return $course === null || ! $this->ownsCourse($owner, $course) ? null : $this->teams->summary($owner, $course);
+    }
+
+    /**
+     * Holds the course by purchase, not through somebody's team: only such
+     * a learner may hand out seats.
+     *
+     * @param  array<string, mixed>  $course
+     */
+    protected function ownsCourse(mixed $owner, array $course): bool
+    {
+        return $owner !== null && ! $this->isSuspended($owner, $course) && $this->access->allows($owner, $course);
+    }
+
+    /**
+     * @param  array<string, mixed>  $course
+     */
+    protected function isSuspended(mixed $user, array $course): bool
+    {
+        return Enrollment::query()
+            ->where('user_id', LearnerId::of($user))
+            ->where('course_entry_id', $course['id'])
+            ->whereNotNull('access_suspended_at')
+            ->exists();
     }
 
     /**
@@ -156,12 +397,10 @@ class CourseProgress
                     ->get());
             }
 
-            if ($course['drip_mode'] === 'schedule') {
-                $enrollments = $enrollments->concat(Enrollment::query()
-                    ->where('course_entry_id', $course['id'])
-                    ->whereIn('user_id', $chunk->all())
-                    ->get());
-            }
+            $enrollments = $enrollments->concat(Enrollment::query()
+                ->where('course_entry_id', $course['id'])
+                ->whereIn('user_id', $chunk->all())
+                ->get());
         }
 
         $statesByUser = $states->groupBy('user_id');
@@ -515,24 +754,31 @@ class CourseProgress
      * Everything a read needs, loaded once: course, lessons, the learner's
      * states, the progress map and the lock map.
      *
-     * @return array{user_id: string, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}|null
+     * @return array{user_id: string, learner: mixed, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}|null
      */
     protected function context(mixed $user, string $courseSlug): ?array
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        return $course === null ? null : $this->contextFor(LearnerId::of($user), $course);
+        return $course === null ? null : $this->contextFor(LearnerId::of($user), $course, learner: $user);
     }
 
     /**
+     * Lessons the learner may not see (K3: audience rules on the lesson or its
+     * section) are dropped here, before anything is counted: for this learner
+     * they are not part of the course, so they neither lock the path nor hold
+     * back the completion.
+     *
      * @param  array<string, mixed>  $course
-     * @param  Collection<int, array<string, mixed>>|null  $lessons
+     * @param  Collection<int, array<string, mixed>>|null  $lessons  every lesson of the course, before the audience filter
      * @param  array{states: Collection<string, LessonState>, enrollment: Enrollment|null}|null  $preloaded  what a report already loaded for many learners at once
-     * @return array{user_id: string, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}
+     * @param  mixed  $learner  the user object when the caller has one; the id otherwise
+     * @return array{user_id: string, learner: mixed, course: array<string, mixed>, lessons: Collection<int, array<string, mixed>>, enrollment: Enrollment|null, progress: array<string, array<string, mixed>>, locks: array<string, bool>}
      */
-    protected function contextFor(string $userId, array $course, ?Collection $lessons = null, ?array $preloaded = null): array
+    protected function contextFor(string $userId, array $course, ?Collection $lessons = null, ?array $preloaded = null, mixed $learner = null): array
     {
         $lessons ??= $this->courses->lessonsFor($course['id']);
+        $lessons = $this->audience->visibleLessons($learner ?? $userId, $course, $lessons);
 
         $states = $preloaded !== null
             ? $preloaded['states']
@@ -549,19 +795,18 @@ class CourseProgress
             ])->all(),
         );
 
-        $enrollment = match (true) {
-            $course['drip_mode'] !== 'schedule' => null,
-            $preloaded !== null => $preloaded['enrollment'],
-            default => Enrollment::query()->where('user_id', $userId)->where('course_entry_id', $course['id'])->first(),
-        };
+        $enrollment = $preloaded !== null
+            ? $preloaded['enrollment']
+            : Enrollment::query()->where('user_id', $userId)->where('course_entry_id', $course['id'])->first();
 
         return [
             'user_id' => $userId,
+            'learner' => $learner ?? $userId,
             'course' => $course,
             'lessons' => $lessons,
             'enrollment' => $enrollment,
             'progress' => $progress,
-            'locks' => $this->locks->lockMap($lessons, $progress, $course['sequencing_mode'], $course['drip_mode'], $enrollment),
+            'locks' => $this->locks->lockMap($lessons, $progress, $course['sequencing_mode'], $course['drip_mode'], $enrollment, null, $course),
         ];
     }
 
@@ -660,9 +905,10 @@ class CourseProgress
     protected function lessonRow(array $context, array $lesson): array
     {
         $locked = $context['locks'][$lesson['slug']] ?? false;
-        $opensAt = $locked && $context['course']['drip_mode'] === 'schedule'
-            ? $this->locks->weekOpensAt($context['enrollment'], $lesson['week'])
-            : null;
+        $drip = $locked && $context['course']['drip_mode'] !== 'none'
+            ? $this->locks->dripGate($context['course'], $lesson, $context['enrollment'])
+            : ['locked' => false, 'opens_at' => null, 'reason' => null];
+        $opensAt = $drip['opens_at'];
         $progress = $context['progress'][$lesson['slug']] ?? LessonProgress::empty($lesson);
 
         return [
@@ -677,7 +923,7 @@ class CourseProgress
             // Completed by passing a test-out rather than by doing the lesson.
             'is_skipped' => $progress['status'] === LessonStatus::Completed->value
                 && (bool) ($progress['item_payload']['skipped'] ?? false),
-            'lock_reason' => $locked ? $this->locks->reason($context['lessons'], $context['progress'], $lesson, $context['course']['sequencing_mode'], $opensAt) : null,
+            'lock_reason' => $locked ? $this->locks->reason($context['lessons'], $context['progress'], $lesson, $context['course']['sequencing_mode'], $opensAt, $drip['locked'] ? $drip['reason'] : null) : null,
             'available_at' => $opensAt?->toIso8601String(),
         ];
     }
@@ -770,7 +1016,7 @@ class CourseProgress
      */
     protected function afterWrite(array $written, string $source, array $context, string $lessonSlug): ?array
     {
-        $fresh = $this->contextFor($context['user_id'], $context['course']);
+        $fresh = $this->contextFor($context['user_id'], $context['course'], learner: $context['learner']);
         $anyCompleted = false;
 
         foreach ($written as [$state, $previousStatus]) {
@@ -780,11 +1026,64 @@ class CourseProgress
             }
         }
 
+        $this->announceUnlocks($context, $fresh, $source);
+
         if ($anyCompleted && $this->summaryFromContext($fresh)['status'] === LessonStatus::Completed->value) {
             $this->markCourseCompleted($fresh);
         }
 
         return $this->lessonFromContext($fresh, $lessonSlug);
+    }
+
+    /**
+     * LessonUnlocked for every lesson this write opened: locked before, open
+     * after. Only what a write causes is announced; a lesson the calendar
+     * opens overnight has no write to hang on and is not.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     */
+    protected function announceUnlocks(array $before, array $after, string $source): void
+    {
+        foreach ($after['lessons'] as $lesson) {
+            $slug = $lesson['slug'];
+
+            if (($before['locks'][$slug] ?? false) && ! ($after['locks'][$slug] ?? false)) {
+                LessonUnlocked::dispatch($after['user_id'], $after['course']['id'], $after['course']['slug'], $slug, $source);
+            }
+        }
+    }
+
+    /**
+     * Runs a write against the learner's enrollment and announces whatever it
+     * unlocked. For the writes that change no lesson, only the clock or the
+     * billing (payments, pauses).
+     *
+     * @param  callable(Enrollment): void  $write
+     */
+    protected function writeEnrollment(mixed $user, string $courseSlug, string $source, callable $write): ?Enrollment
+    {
+        $before = $this->context($user, $courseSlug);
+
+        if ($before === null) {
+            return null;
+        }
+
+        $enrollment = $before['enrollment'] ?? $this->enroll($user, $courseSlug);
+
+        if ($enrollment === null) {
+            return null;
+        }
+
+        $write($enrollment);
+
+        if ($enrollment->isDirty()) {
+            $enrollment->save();
+        }
+
+        $this->announceUnlocks($before, $this->contextFor($before['user_id'], $before['course'], learner: $before['learner']), $source);
+
+        return $enrollment;
     }
 
     /**

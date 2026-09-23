@@ -1,0 +1,4 @@
+<p class="courses-block courses-block--download courses-download">
+    <a class="courses-download__link" href="{{ url | sanitize }}" download>{{ label | sanitize }}</a>
+    {{ if extension || size }}<span class="courses-download__meta">({{ extension | upper }}{{ if extension && size }}, {{ /if }}{{ size }})</span>{{ /if }}
+</p>

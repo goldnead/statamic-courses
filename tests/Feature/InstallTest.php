@@ -1,8 +1,10 @@
 <?php
 
 use Goldnead\Courses\Facades\Courses;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\YAML;
 
 it('creates both collections with their blueprints', function () {
     expect(Collection::find('courses'))->not->toBeNull()
@@ -91,4 +93,55 @@ it('points the entries fields at configured collection handles', function () {
     expect(Collection::find('trainings'))->not->toBeNull()
         ->and($lesson->field('course')->config()['collections'])->toBe(['trainings'])
         ->and($lesson->field('prerequisite_lessons')->config()['collections'])->toBe(['training_units']);
+});
+
+it('has a German label for every label, instruction and option the blueprints carry', function () {
+    $strings = [];
+    $walk = function (array $node) use (&$walk, &$strings): void {
+        foreach ($node as $key => $value) {
+            if (in_array($key, ['title', 'display', 'instructions', 'add_row'], true) && is_string($value)) {
+                $strings[] = $value;
+            } elseif ($key === 'options' && is_array($value)) {
+                array_push($strings, ...array_values($value));
+            } elseif (is_array($value)) {
+                $walk($value);
+            }
+        }
+    };
+
+    foreach (['course', 'course_lesson'] as $blueprint) {
+        $walk(YAML::parse((string) file_get_contents(__DIR__.'/../../resources/blueprints/'.$blueprint.'.yaml')));
+    }
+
+    $german = json_decode((string) file_get_contents(__DIR__.'/../../resources/lang/de.json'), true);
+
+    expect(array_values(array_diff(array_unique($strings), array_keys($german))))->toBe([]);
+});
+
+it('gives the download block an asset container, the configured one or the first', function () {
+    $download = fn () => Blueprint::find('collections.course_lessons.course_lesson')
+        ->field('blocks')->config()['sets']['media']['sets']['download']['fields'][0]['field'];
+
+    AssetContainer::make('media')->disk('local')->save();
+    AssetContainer::make('paid')->disk('local')->save();
+
+    $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+    expect($download()['container'])->toBe('media');
+
+    config()->set('courses.downloads.container', 'paid');
+    $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+    expect($download()['container'])->toBe('paid');
+});
+
+it('localizes the lesson building blocks and the new course settings', function () {
+    config()->set('app.locale', 'de');
+    $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+
+    $lesson = Blueprint::find('collections.course_lessons.course_lesson');
+    $course = Blueprint::find('collections.courses.course');
+
+    expect($lesson->field('blocks')->display())->toBe('Bausteine')
+        ->and($lesson->field('blocks')->config()['sets']['media']['sets']['download']['display'])->toBe('Download')
+        ->and($lesson->field('blocks')->config()['sets']['content']['sets']['columns']['fields'][0]['field']['add_row'])->toBe('Spalte hinzufügen')
+        ->and($course->field('on_payment_failure')->config()['options']['pause_drip'])->toBe('Freischaltung pausieren');
 });

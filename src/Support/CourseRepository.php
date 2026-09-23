@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Support;
 
+use Goldnead\Courses\Progress\DripSchedule;
 use Illuminate\Support\Collection;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
@@ -28,7 +29,14 @@ class CourseRepository
 
     public const SEQUENCING_MODES = ['none', 'section', 'lesson'];
 
-    public const DRIP_MODES = ['none', 'schedule'];
+    public const DRIP_MODES = DripSchedule::MODES;
+
+    /**
+     * What a failed subscription payment does to a course: nothing until the
+     * paid period ends (`keep`), stop the drip (`pause_drip`), or shut the
+     * course until the money arrives (`revoke`).
+     */
+    public const PAYMENT_FAILURE_MODES = ['keep', 'pause_drip', 'revoke'];
 
     public function coursesCollection(): string
     {
@@ -41,7 +49,7 @@ class CourseRepository
     }
 
     /**
-     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string, url: string|null}|null
+     * @return array<string, mixed>|null
      */
     public function findCourse(string $slug): ?array
     {
@@ -69,7 +77,7 @@ class CourseRepository
     }
 
     /**
-     * @return array{id: string, slug: string, title: string, summary: string, product: string, sequencing_mode: string, drip_mode: string, url: string|null}
+     * @return array<string, mixed>
      */
     public function normalizeCourse(StatamicEntry $entry): array
     {
@@ -86,6 +94,18 @@ class CourseRepository
             'product' => $product !== '' ? $product : (string) $entry->slug(),
             'sequencing_mode' => $this->oneOf($entry->get('sequencing_mode'), self::SEQUENCING_MODES, 'none'),
             'drip_mode' => $this->oneOf($entry->get('drip_mode'), self::DRIP_MODES, 'none'),
+            'drip_day_of_month' => max(1, min(31, (int) ($entry->get('drip_day_of_month') ?? 1))),
+            'on_payment_failure' => $this->oneOf($entry->get('on_payment_failure'), self::PAYMENT_FAILURE_MODES, 'keep'),
+            // Further products that open this course: a bundle sold as one
+            // product lists itself on every course it contains.
+            'bundles' => array_values(array_diff($this->strings($entry->get('bundles')), [$product !== '' ? $product : (string) $entry->slug()])),
+            'team_seats' => max(0, (int) ($entry->get('team_seats') ?? 0)),
+            'section_audiences' => collect(is_array($entry->get('section_audiences')) ? $entry->get('section_audiences') : [])
+                ->filter(fn ($row): bool => is_array($row) && trim((string) ($row['section_key'] ?? '')) !== '')
+                ->mapWithKeys(fn (array $row): array => [
+                    trim((string) $row['section_key']) => $this->audience($row['entitlements'] ?? null, $row['tags'] ?? null, $row['segments'] ?? null, $row['groups'] ?? null),
+                ])
+                ->all(),
             // Null when the collection has no route, as on the source site.
             'url' => $entry->url(),
         ];
@@ -150,8 +170,71 @@ class CourseRepository
             'phase_title' => $this->stringOrNull($entry->get('phase_title')),
             'phase_order' => $this->intOrNull($entry->get('phase_order')),
             'week' => $this->intOrNull($entry->get('week')),
+            'drip_after' => $this->intOrNull($entry->get('drip_after')),
+            'drip_date' => $this->dateOrNull($entry->get('drip_date')),
             'prerequisite_slugs' => $prerequisiteSlugs,
+            'audience' => $this->audience($entry->get('audience_entitlements'), $entry->get('audience_tags'), $entry->get('audience_segments'), $entry->get('audience_groups')),
+            'assessment' => $this->stringOrNull($entry->get('assessment')),
+            'pass_score' => $this->intOrNull($entry->get('pass_score')),
+            'pass_levels' => $this->strings($entry->get('pass_levels')),
         ];
+    }
+
+    /**
+     * Who may see a lesson or a section. Empty lists everywhere: everybody.
+     *
+     * @return array{entitlements: list<string>, tags: list<string>, segments: list<string>, groups: list<string>}
+     */
+    protected function audience(mixed $entitlements, mixed $tags, mixed $segments, mixed $groups): array
+    {
+        return [
+            'entitlements' => $this->strings($entitlements),
+            'tags' => $this->strings($tags),
+            'segments' => $this->strings($segments),
+            'groups' => $this->strings($groups),
+        ];
+    }
+
+    /**
+     * A list field (taggable, list, checkboxes) or a comma-separated string,
+     * as trimmed, non-empty strings.
+     *
+     * @return list<string>
+     */
+    protected function strings(mixed $value): array
+    {
+        if (is_string($value)) {
+            $value = explode(',', $value);
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_filter(
+            array_map(fn ($item): string => is_scalar($item) ? trim((string) $item) : '', $value),
+            fn (string $item): bool => $item !== '',
+        )));
+    }
+
+    /**
+     * A date field's value as `Y-m-d`, whatever shape it was stored in.
+     */
+    protected function dateOrNull(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_array($value)) {
+            $value = $value['date'] ?? $value['start'] ?? null;
+        }
+
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        return preg_match('/^\d{4}-\d{2}-\d{2}/', trim($value), $m) === 1 ? $m[0] : null;
     }
 
     /**

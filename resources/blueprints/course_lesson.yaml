@@ -48,24 +48,206 @@ tabs:
               default: false
               instructions: 'Stays open while its phase is locked. Passing it completes the earlier phases.'
           -
-            handle: content
+            handle: assessment
             field:
-              type: markdown
-              display: Content
+              type: text
+              display: Assessment
+              instructions: 'For a quiz lesson: the handle of a questionnaire from Assessments. Passing it completes the lesson. Without a minimum score or result levels, any submission passes.'
+              if:
+                item_type: 'equals quiz'
+          -
+            handle: pass_score
+            field:
+              type: integer
+              display: 'Minimum score'
+              width: 50
+              if:
+                item_type: 'equals quiz'
+          -
+            handle: pass_levels
+            field:
+              type: taggable
+              display: 'Passing result levels'
+              width: 50
+              if:
+                item_type: 'equals quiz'
           -
             handle: video_duration
             field:
               type: text
               display: 'Video duration'
               instructions: 'mm:ss, hh:mm:ss or seconds. Without it a video cannot complete itself by being watched.'
+              if:
+                item_type: 'equals video'
           -
             handle: est_minutes
             field:
               type: integer
               display: 'Estimated minutes'
       -
+        display: 'Lesson content'
+        instructions: 'Build the lesson from blocks. Text in the older content field is shown first, above the blocks.'
+        fields:
+          -
+            handle: content
+            field:
+              type: markdown
+              display: Content
+              instructions: 'Plain text, as lessons had it before blocks. Stays shown; new lessons can leave it empty.'
+          -
+            handle: blocks
+            field:
+              type: replicator
+              display: Blocks
+              collapse: false
+              previews: true
+              sets:
+                content:
+                  display: Content
+                  sets:
+                    text:
+                      display: Text
+                      icon: text-formatting-paragraph
+                      fields:
+                        -
+                          handle: text
+                          field:
+                            type: markdown
+                            display: Text
+                    callout:
+                      display: Callout
+                      icon: info-square
+                      fields:
+                        -
+                          handle: tone
+                          field:
+                            type: button_group
+                            display: Tone
+                            default: info
+                            options:
+                              info: Note
+                              tip: Tip
+                              warning: Warning
+                        -
+                          handle: heading
+                          field:
+                            type: text
+                            display: Heading
+                        -
+                          handle: text
+                          field:
+                            type: markdown
+                            display: Text
+                    columns:
+                      display: Columns
+                      icon: layout-two-columns
+                      fields:
+                        -
+                          handle: columns
+                          field:
+                            type: grid
+                            display: Columns
+                            mode: stacked
+                            min_rows: 2
+                            max_rows: 4
+                            add_row: 'Add column'
+                            fields:
+                              -
+                                handle: text
+                                field:
+                                  type: markdown
+                                  display: Text
+                    faq:
+                      display: FAQ
+                      icon: mail-chat-bubble-text
+                      fields:
+                        -
+                          handle: items
+                          field:
+                            type: grid
+                            display: Questions
+                            mode: stacked
+                            add_row: 'Add question'
+                            fields:
+                              -
+                                handle: question
+                                field:
+                                  type: text
+                                  display: Question
+                              -
+                                handle: answer
+                                field:
+                                  type: markdown
+                                  display: Answer
+                media:
+                  display: Media
+                  sets:
+                    video:
+                      display: Video
+                      icon: movie-video-clip
+                      fields:
+                        -
+                          handle: url
+                          field:
+                            type: video
+                            display: 'Video URL'
+                            instructions: 'YouTube, Vimeo or a direct link to a video file.'
+                        -
+                          handle: caption
+                          field:
+                            type: text
+                            display: Caption
+                    download:
+                      display: Download
+                      icon: download
+                      fields:
+                        -
+                          handle: file
+                          field:
+                            type: assets
+                            display: File
+                            max_files: 1
+                        -
+                          handle: label
+                          field:
+                            type: text
+                            display: Label
+                            instructions: 'The link text. Empty: the file name.'
+                        -
+                          handle: private
+                          field:
+                            type: toggle
+                            display: 'Only for learners of this course'
+                            default: false
+                            instructions: 'Serves the file through a signed link (statamic-private-media), so only somebody who may open the course can download it. Without that addon the file is not linked at all.'
+                    button:
+                      display: Button
+                      icon: direction-buttons
+                      fields:
+                        -
+                          handle: label
+                          field:
+                            type: text
+                            display: Label
+                            width: 50
+                        -
+                          handle: link
+                          field:
+                            type: link
+                            display: Link
+                            width: 50
+                        -
+                          handle: style
+                          field:
+                            type: button_group
+                            display: Style
+                            default: primary
+                            options:
+                              primary: Primary
+                              secondary: Secondary
+      -
         display: Structure
-        instructions: 'A later phase stays locked until every earlier phase is completed. With drip by schedule, a lesson opens in its week after enrollment.'
+        instructions: 'A later phase stays locked until every earlier phase is completed.'
         fields:
           -
             handle: section_key
@@ -108,13 +290,7 @@ tabs:
             field:
               type: integer
               display: 'Phase order'
-              width: 50
-          -
-            handle: week
-            field:
-              type: integer
-              display: Week
-              width: 50
+              width: 33
           -
             handle: prerequisite_lessons
             field:
@@ -123,6 +299,56 @@ tabs:
               collections:
                 - course_lessons
               instructions: 'This lesson opens only after all of these are completed.'
+      -
+        display: Drip
+        instructions: 'Which field counts depends on the drip set on the course. Week: the week after enrollment. Opens after: days after enrollment, the nth day of the month or the nth payment. Opens on: a date. Empty: the lesson opens at once.'
+        fields:
+          -
+            handle: week
+            field:
+              type: integer
+              display: Week
+              width: 33
+          -
+            handle: drip_after
+            field:
+              type: integer
+              display: 'Opens after'
+              width: 33
+          -
+            handle: drip_date
+            field:
+              type: date
+              display: 'Opens on'
+              width: 33
+      -
+        display: 'Visible to'
+        instructions: 'Empty: everybody in the course. Otherwise only learners who match one of these (product handles, group, tag, segment handle); for everybody else the lesson is not part of the course.'
+        fields:
+          -
+            handle: audience_entitlements
+            field:
+              type: taggable
+              display: Entitlements
+              width: 50
+          -
+            handle: audience_groups
+            field:
+              type: user_groups
+              display: 'User groups'
+              width: 50
+          -
+            handle: audience_tags
+            field:
+              type: taggable
+              display: 'LeadHub tags'
+              width: 50
+          -
+            handle: audience_segments
+            field:
+              type: taggable
+              display: 'LeadHub segments'
+              width: 50
   sidebar:
     display: Sidebar
     sections:

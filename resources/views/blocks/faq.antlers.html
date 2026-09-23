@@ -1,0 +1,8 @@
+<div class="courses-block courses-block--faq courses-faq">
+    {{ items }}
+        <details class="courses-faq__item">
+            <summary class="courses-faq__question">{{ question | sanitize }}</summary>
+            <div class="courses-faq__answer">{{ answer_html }}</div>
+        </details>
+    {{ /items }}
+</div>

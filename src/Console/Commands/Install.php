@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Console\Commands;
 
 use Illuminate\Console\Command;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\YAML;
@@ -70,6 +71,7 @@ class Install extends Command
 
         $contents = YAML::parse((string) file_get_contents(__DIR__.'/../../../resources/blueprints/'.$handle.'.yaml'));
         $contents = $this->localize($this->pointEntriesFieldsAt($contents, $courses, $lessons));
+        $contents = $this->pointAssetsFieldsAt($contents);
 
         Blueprint::make($handle)
             ->setNamespace($namespace)
@@ -92,7 +94,7 @@ class Install extends Command
     protected function localize(array $contents): array
     {
         foreach ($contents as $key => $value) {
-            if (in_array($key, ['title', 'display', 'instructions'], true) && is_string($value)) {
+            if (in_array($key, ['title', 'display', 'instructions', 'add_row'], true) && is_string($value)) {
                 $contents[$key] = $this->translate($value);
             } elseif ($key === 'options' && is_array($value)) {
                 $contents[$key] = array_map(fn ($label) => is_string($label) ? $this->translate($label) : $label, $value);
@@ -135,6 +137,43 @@ class Install extends Command
         }
 
         return $this->dictionary = [];
+    }
+
+    /**
+     * An assets field without a container takes the whole publish form down
+     * ("An asset container has not been configured"), so the download block
+     * gets one written in: `courses.downloads.container`, or the site's first
+     * container. A site without any keeps the field unconfigured and is told.
+     *
+     * @param  array<string, mixed>  $contents
+     * @return array<string, mixed>
+     */
+    protected function pointAssetsFieldsAt(array $contents): array
+    {
+        $configured = config('courses.downloads.container');
+        $container = is_string($configured) && $configured !== '' && AssetContainer::find($configured)
+            ? $configured
+            : AssetContainer::all()->first()?->handle();
+
+        $walk = function (array $node) use (&$walk, $container): array {
+            if (($node['type'] ?? null) === 'assets' && ! isset($node['container'])) {
+                if ($container !== null) {
+                    $node['container'] = $container;
+                } else {
+                    $this->components->warn('No asset container: the download block needs one. Create a container, then run courses:install --force.');
+                }
+            }
+
+            foreach ($node as $key => $value) {
+                if (is_array($value)) {
+                    $node[$key] = $walk($value);
+                }
+            }
+
+            return $node;
+        };
+
+        return $walk($contents);
     }
 
     /**

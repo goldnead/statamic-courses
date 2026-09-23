@@ -59,6 +59,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Lesson downloads
+    |--------------------------------------------------------------------------
+    |
+    | The asset container the download block picks files from. Written into
+    | the lesson blueprint by `courses:install`; null takes the site's first
+    | container. Private downloads (statamic-private-media) must live in that
+    | addon's container instead, so point this at it if every download is paid
+    | material.
+    |
+    */
+
+    'downloads' => [
+        'container' => env('COURSES_DOWNLOADS_CONTAINER'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Front-end route
     |--------------------------------------------------------------------------
     |

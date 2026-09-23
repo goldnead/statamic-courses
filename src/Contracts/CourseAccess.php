@@ -18,8 +18,12 @@ use Goldnead\Courses\Access\EntitlementsCourseAccess;
 interface CourseAccess
 {
     /**
+     * `bundles` lists further products that open the course (K6); an
+     * implementation that ignores it simply does not support bundles on the
+     * course.
+     *
      * @param  mixed  $user  a Statamic user, an Authenticatable, or whatever the bound implementation accepts
-     * @param  array{id: string, slug: string, product: string}  $course
+     * @param  array{id: string, slug: string, product: string, bundles?: list<string>}  $course
      */
     public function allows(mixed $user, array $course): bool;
 }

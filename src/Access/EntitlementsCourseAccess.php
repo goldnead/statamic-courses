@@ -11,8 +11,10 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Asks statamic-entitlements whether the learner holds the course's product.
  *
- * Bundles are entitlements' business: a package that includes this product is
- * resolved there by its PackageResolver, not here.
+ * Two ways to sell a bundle. On the course: list the bundle product under
+ * `bundles`, and a grant for it opens every course that lists it. Or in
+ * entitlements: a PackageResolver there expands the bundle, and this class
+ * never notices. Both may be used side by side.
  *
  * Entitlements addresses a subject as a (type, id) pair, and the type has to
  * match whatever wrote the grants. How a learner becomes that pair:
@@ -35,7 +37,16 @@ class EntitlementsCourseAccess implements CourseAccess
             return false;
         }
 
-        return $this->entitlements->allows($this->subject($user), $course['product']);
+        $subject = $this->subject($user);
+
+        // The course's own product, then every bundle that lists the course.
+        foreach ([$course['product'], ...($course['bundles'] ?? [])] as $product) {
+            if (is_string($product) && $product !== '' && $this->entitlements->allows($subject, $product)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function subject(mixed $user): Model|SubjectReference

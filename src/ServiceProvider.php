@@ -5,7 +5,10 @@ namespace Goldnead\Courses;
 use Goldnead\Courses\Access\ClosedCourseAccess;
 use Goldnead\Courses\Access\EntitlementsCourseAccess;
 use Goldnead\Courses\Contracts\CourseAccess;
+use Goldnead\Courses\Integrations\AssessmentsBridge;
+use Goldnead\Courses\Integrations\PaymentsBridge;
 use Goldnead\Entitlements\EntitlementManager;
+use Illuminate\Support\Facades\Event;
 use Statamic\Facades\Collection;
 use Statamic\Facades\CP\Nav;
 use Statamic\Facades\Entry;
@@ -30,6 +33,11 @@ class ServiceProvider extends AddonServiceProvider
      * The sibling that owns the shared "Suite" nav section, when installed.
      */
     public const SUITE_NAV = '\Goldnead\StatamicPayments\Cp\SuiteNav';
+
+    /**
+     * `courses::blocks.download`, not the package name core would pick.
+     */
+    protected $viewNamespace = 'courses';
 
     public function register(): void
     {
@@ -65,7 +73,37 @@ class ServiceProvider extends AddonServiceProvider
             ->bootComputedValues()
             ->bootPermissions()
             ->bootNavigation()
+            ->bootIntegrations()
             ->bootPublishables();
+    }
+
+    /**
+     * The optional siblings, each only when installed. Registered by hand from
+     * src/Integrations rather than discovered from src/Listeners: discovery
+     * would wire them to event classes that may not exist, and registering
+     * both ways doubles every call.
+     */
+    protected function bootIntegrations(): self
+    {
+        // Once per application, however often bootAddon() runs: a second
+        // registration would count every payment and every quiz attempt twice.
+        if ($this->app->bound(self::class.'.integrations')) {
+            return $this;
+        }
+
+        $this->app->instance(self::class.'.integrations', true);
+
+        if (PaymentsBridge::available()) {
+            Event::listen(PaymentsBridge::STARTED, [PaymentsBridge::class, 'started']);
+            Event::listen(PaymentsBridge::RENEWED, [PaymentsBridge::class, 'renewed']);
+            Event::listen(PaymentsBridge::CYCLE_FAILED, [PaymentsBridge::class, 'cycleFailed']);
+        }
+
+        if (AssessmentsBridge::available()) {
+            Event::listen(AssessmentsBridge::COMPLETED, [AssessmentsBridge::class, 'completed']);
+        }
+
+        return $this;
     }
 
     /**

@@ -13,6 +13,11 @@ use Illuminate\Support\Carbon;
  * @property array<int|string, mixed>|null $week_states
  * @property Carbon|null $started_at
  * @property Carbon|null $completed_at
+ * @property int $payments_count
+ * @property Carbon|null $trial_until
+ * @property Carbon|null $drip_paused_at
+ * @property int $drip_paused_seconds
+ * @property Carbon|null $access_suspended_at
  */
 class Enrollment extends Model
 {
@@ -25,6 +30,11 @@ class Enrollment extends Model
         'week_states',
         'started_at',
         'completed_at',
+        'payments_count',
+        'trial_until',
+        'drip_paused_at',
+        'drip_paused_seconds',
+        'access_suspended_at',
     ];
 
     protected function casts(): array
@@ -34,6 +44,21 @@ class Enrollment extends Model
             'week_states' => 'array',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'payments_count' => 'integer',
+            'trial_until' => 'datetime',
+            'drip_paused_at' => 'datetime',
+            'drip_paused_seconds' => 'integer',
+            'access_suspended_at' => 'datetime',
         ];
+    }
+
+    public function isDripPaused(): bool
+    {
+        return $this->drip_paused_at !== null;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->access_suspended_at !== null;
     }
 }

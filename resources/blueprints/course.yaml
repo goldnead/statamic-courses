@@ -18,7 +18,7 @@ tabs:
               type: textarea
               display: Summary
       -
-        display: Access and pacing
+        display: 'Access and pacing'
         fields:
           -
             handle: product
@@ -26,6 +26,12 @@ tabs:
               type: text
               display: Product
               instructions: 'The entitlements product that opens this course. Empty means the course slug.'
+          -
+            handle: bundles
+            field:
+              type: taggable
+              display: Bundles
+              instructions: 'Further products that open this course, for a bundle sold as one product.'
           -
             handle: sequencing_mode
             field:
@@ -42,10 +48,90 @@ tabs:
               type: select
               display: Drip
               default: none
-              instructions: 'Schedule: a lesson with a week number opens that many weeks after the learner enrolled.'
+              instructions: 'When a lesson opens. Each lesson says when under Drip.'
               options:
                 none: 'All at once'
                 schedule: 'By week, from enrollment'
+                days: 'By days, from enrollment'
+                date: 'On a date'
+                day_of_month: 'On a day of the month'
+                payments: 'After a number of payments'
+                after_trial: 'After the trial'
+          -
+            handle: drip_day_of_month
+            field:
+              type: integer
+              display: 'Day of the month'
+              default: 1
+              min: 1
+              max: 31
+              instructions: 'Lessons open on this day, the nth month after enrollment. A day the month does not have falls on its last day.'
+              if:
+                drip_mode: 'equals day_of_month'
+          -
+            handle: on_payment_failure
+            field:
+              type: select
+              display: 'When a payment fails'
+              default: keep
+              instructions: 'For courses paid by subscription. Lifted as soon as the payment goes through.'
+              options:
+                keep: 'Keep access until the paid period ends'
+                pause_drip: 'Pause the drip'
+                revoke: 'Close the course at once'
+      -
+        display: Team
+        fields:
+          -
+            handle: team_seats
+            field:
+              type: integer
+              display: 'Seats per purchase'
+              default: 0
+              min: 0
+              instructions: 'How many people a buyer can add to the course by email. 0: no team.'
+      -
+        display: 'Visible to'
+        instructions: 'Limit a whole section to some learners. Everybody else does not see its lessons.'
+        fields:
+          -
+            handle: section_audiences
+            field:
+              type: grid
+              display: Sections
+              mode: stacked
+              add_row: 'Add section rule'
+              fields:
+                -
+                  handle: section_key
+                  field:
+                    type: text
+                    display: 'Section key'
+                    width: 50
+                -
+                  handle: groups
+                  field:
+                    type: user_groups
+                    display: 'User groups'
+                    width: 50
+                -
+                  handle: entitlements
+                  field:
+                    type: taggable
+                    display: Entitlements
+                    width: 33
+                -
+                  handle: tags
+                  field:
+                    type: taggable
+                    display: 'LeadHub tags'
+                    width: 33
+                -
+                  handle: segments
+                  field:
+                    type: taggable
+                    display: 'LeadHub segments'
+                    width: 33
   sidebar:
     display: Sidebar
     sections:

@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
  * 1. `sequencing_mode` on the course (none, lesson by lesson, section by section)
  * 2. per-lesson prerequisites, an arbitrary DAG
  * 3. phases: a lesson in phase N waits for every earlier phase
- * 4. schedule drip: a lesson in week N waits until week N of the enrollment
+ * 4. drip: a lesson waits for its week, day, date or payment ({@see DripSchedule})
  *
  * and finally: a completed lesson is never locked, so it can be revisited.
  *
@@ -26,6 +26,13 @@ use Illuminate\Support\Collection;
  */
 class LockResolver
 {
+    protected DripSchedule $drip;
+
+    public function __construct(?DripSchedule $drip = null)
+    {
+        $this->drip = $drip ?? new DripSchedule;
+    }
+
     /**
      * A milestone completes itself once its prerequisites are complete, or, with
      * none named, once every other lesson of its phase is. Derived on every read,
@@ -61,6 +68,7 @@ class LockResolver
     /**
      * @param  Collection<int, array<string, mixed>>  $lessons
      * @param  array<string, array<string, mixed>>  $progressMap
+     * @param  array<string, mixed>  $course  the course, for the drip settings beyond the mode (day of month)
      * @return array<string, bool>
      */
     public function lockMap(
@@ -70,6 +78,7 @@ class LockResolver
         string $dripMode = 'none',
         ?Enrollment $enrollment = null,
         ?CarbonInterface $now = null,
+        array $course = [],
     ): array {
         $lockMap = $this->baseLockMap($lessons, $progressMap, $sequencingMode);
         $isCompleted = $this->completedCheck($progressMap);
@@ -110,12 +119,10 @@ class LockResolver
             }
         }
 
-        // Gate 4: schedule.
-        if ($dripMode === 'schedule') {
-            $openWeek = $this->openWeek($enrollment, $now);
+        // Gate 4: drip, in whichever mode the course runs.
+        if ($dripMode !== 'none') {
             foreach ($lessons as $lesson) {
-                $week = $lesson['week'] ?? null;
-                if ($week !== null && $week > $openWeek) {
+                if ($this->drip->gate([...$course, 'drip_mode' => $dripMode], $lesson, $enrollment, $now)['locked']) {
                     $lockMap[$lesson['slug']] = true;
                 }
             }
@@ -132,15 +139,19 @@ class LockResolver
 
     /**
      * Why a locked lesson is locked, as a stable code a template can translate:
-     * `schedule`, `prerequisite`, `phase` or `sequence`. The first gate that
+     * `schedule`, `payment`, `paused`, `prerequisite`, `phase` or `sequence`. The first gate that
      * holds wins, in the order a learner can do least about.
      *
      * @param  Collection<int, array<string, mixed>>  $lessons
      * @param  array<string, array<string, mixed>>  $progressMap
      * @param  array<string, mixed>  $lesson
      */
-    public function reason(Collection $lessons, array $progressMap, array $lesson, string $sequencingMode, ?CarbonInterface $opensAt): string
+    public function reason(Collection $lessons, array $progressMap, array $lesson, string $sequencingMode, ?CarbonInterface $opensAt, ?string $dripReason = null): string
     {
+        if ($dripReason !== null) {
+            return $dripReason;
+        }
+
         if ($opensAt !== null) {
             return 'schedule';
         }
@@ -174,15 +185,7 @@ class LockResolver
      */
     public function openWeek(?Enrollment $enrollment, ?CarbonInterface $now = null): int
     {
-        if (! $enrollment instanceof Enrollment || $enrollment->started_at === null) {
-            return max(1, (int) ($enrollment->current_week ?? 1));
-        }
-
-        $now ??= now();
-        $elapsedDays = (int) floor($enrollment->started_at->diffInDays($now, false));
-        $byCalendar = $elapsedDays < 0 ? 1 : intdiv($elapsedDays, 7) + 1;
-
-        return max(1, $byCalendar, (int) $enrollment->current_week);
+        return $this->drip->openWeek($enrollment, $now);
     }
 
     /**
@@ -190,11 +193,19 @@ class LockResolver
      */
     public function weekOpensAt(?Enrollment $enrollment, ?int $week): ?CarbonInterface
     {
-        if ($week === null || $week <= 1 || ! $enrollment instanceof Enrollment || $enrollment->started_at === null) {
-            return null;
-        }
+        return $this->drip->gate(['drip_mode' => 'schedule'], ['week' => $week], $enrollment)['opens_at'];
+    }
 
-        return $enrollment->started_at->copy()->addDays(($week - 1) * 7);
+    /**
+     * The drip answer for one lesson: locked, opens_at, reason.
+     *
+     * @param  array<string, mixed>  $course
+     * @param  array<string, mixed>  $lesson
+     * @return array{locked: bool, opens_at: CarbonInterface|null, reason: string|null}
+     */
+    public function dripGate(array $course, array $lesson, ?Enrollment $enrollment, ?CarbonInterface $now = null): array
+    {
+        return $this->drip->gate($course, $lesson, $enrollment, $now);
     }
 
     /**

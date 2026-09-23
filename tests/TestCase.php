@@ -37,6 +37,9 @@ abstract class TestCase extends AddonTestCase
         // never fires; register the tag the way that discovery would.
         Courses::register();
 
+        // The same boot callback loads resources/views; do what it would.
+        view()->addNamespace('courses', __DIR__.'/../resources/views');
+
         $this->artisan('courses:install')->run();
     }
 
@@ -164,7 +167,7 @@ abstract class TestCase extends AddonTestCase
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function makeCourse(string $slug, array $data = []): string
+    public function makeCourse(string $slug, array $data = []): string
     {
         $entry = Entry::make()
             ->collection('courses')
@@ -178,7 +181,7 @@ abstract class TestCase extends AddonTestCase
     /**
      * @param  array<string, mixed>  $data
      */
-    protected function makeLesson(string $courseId, string $slug, array $data = []): string
+    public function makeLesson(string $courseId, string $slug, array $data = []): string
     {
         $entry = Entry::make()
             ->collection('course_lessons')

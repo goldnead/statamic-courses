@@ -1,6 +1,7 @@
 <?php
 
 use Goldnead\Courses\Http\Controllers\ProgressController;
+use Goldnead\Courses\Http\Controllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -15,4 +16,8 @@ if (config('courses.routes.enabled', true)) {
     Route::post('progress', ProgressController::class)
         ->middleware('throttle:60,1')
         ->name('courses.progress');
+
+    Route::post('team', TeamController::class)
+        ->middleware('throttle:30,1')
+        ->name('courses.team');
 }
