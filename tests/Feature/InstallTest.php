@@ -186,6 +186,21 @@ describe('--merge', function () {
     });
 });
 
+it('creates nothing on a dry run on a fresh site, and says what it would create', function () {
+    Collection::find('courses')->delete();
+    Collection::find('course_lessons')->delete();
+    Blueprint::find('collections.courses.course')?->delete();
+    Blueprint::find('collections.course_lessons.course_lesson')?->delete();
+
+    $this->artisan('courses:install', ['--merge' => true, '--dry-run' => true])
+        ->expectsOutputToContain('would create')
+        ->assertSuccessful();
+
+    expect(Collection::find('courses'))->toBeNull()
+        ->and(Collection::find('course_lessons'))->toBeNull()
+        ->and(Blueprint::find('collections.courses.course'))->toBeNull();
+});
+
 it('gives the download block an asset container, the configured one or the first', function () {
     $download = fn () => Blueprint::find('collections.course_lessons.course_lesson')
         ->field('blocks')->config()['sets']['media']['sets']['download']['fields'][0]['field'];

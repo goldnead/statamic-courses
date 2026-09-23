@@ -96,9 +96,15 @@ path. Tags and segments need statamic-leadhub; without it such a rule matches no
   source still opens the course: a lifetime grant, a bundle, another subscription, a team seat.
   A new purchase lifts the hold at once.
 
-Holds show on the Course Progress screen under **Payment holds**, where somebody with the
-permission `manage course holds` can lift one. Without payments: `Courses::paymentFailed()`, `paymentRecovered()`, `pauseDrip()`,
-`resumeDrip()`, `suspendAccess()`, `restoreAccess()`.
+A hold set by hand (`Courses::suspendAccess()` without a subscription) is absolute: no grant and
+no team seat opens the course, and no renewal or purchase lifts it; only `restoreAccess()` or the
+Control Panel does.
+
+Holds show on the Course Progress screen under **Holds**, marked as closed or as open through
+another purchase, with the provider's subscription number. Somebody with the permission
+`manage course holds` can lift one there, after a confirmation. Without payments:
+`Courses::paymentFailed()`, `paymentRecovered()`, `pauseDrip()`, `resumeDrip()`,
+`suspendAccess()`, `restoreAccess()`.
 
 ## Bundles and teams
 
@@ -123,7 +129,8 @@ statamic-private-media's container and is served through a link signed for `cour
 courses answers private-media for that resource with `Courses::canAccess()`, so buyers, team
 members and bundle holders all get the file. Public and private downloads sit side by side.
 Without private-media the toggle is not offered. `courses:install` points the public field at
-`courses.downloads.container` or the first container other than the private one.
+`courses.downloads.container` or the first container other than the private one. On a
+multi-brand site a download is checked in the brand of the request that fetches it.
 
 ## Quiz
 
@@ -224,6 +231,11 @@ How a learner reaches entitlements: an Eloquent model passes through; a Statamic
 (`User::current()` on an eloquent install) is unwrapped to its model; anything else is looked up as
 subject type `courses.entitlements.subject_type`. Unset, that is the auth model's morph class on an
 eloquent install and `user` on a flat-file one.
+
+courses also asks under the learner's email address, as subject type `email`. That is where
+statamic-payments grants when the site has no SubjectResolver that knows the buyer's address, so a
+buyer on such a site gets in with the account that has the same address. A site with a resolver
+loses nothing by it.
 
 A host with its own access rules binds its own implementation, and it wins over the default:
 

@@ -80,7 +80,7 @@ it('applies the course rule on a failed cycle, only to the courses the subscript
 
     expect(Courses::canAccess('buyer', 'club'))->toBeFalse()
         ->and(Courses::canAccess('buyer', 'unrelated'))->toBeTrue()
-        ->and(Courses::hold('buyer', 'club'))->toMatchArray(['subscription_id' => '1', 'blocks' => true]);
+        ->and(Courses::hold('buyer', 'club'))->toMatchArray(['subscription_id' => 'sub_provider_1', 'blocks' => true]);
 
     event(new SubscriptionRenewed(subscription(['times_charged' => 1])));
 
@@ -95,7 +95,7 @@ it('opens the course again when the learner buys a new subscription after a fail
 
     // The old one is given up; a new one is bought and paid.
     Entitlements::grant(new SubjectReference('user', 'buyer'), 'membership', 'statamic-payments', 'tr_new');
-    event(new SubscriptionStarted(subscription(['id' => 2, 'product' => 'yearly-membership', 'paymentRefs' => ['tr_new']])));
+    event(new SubscriptionStarted(subscription(['id' => 2, 'provider_id' => 'sub_new', 'product' => 'yearly-membership', 'paymentRefs' => ['tr_new']])));
 
     expect(Courses::canAccess('buyer', 'club'))->toBeTrue()
         ->and(Courses::hold('buyer', 'club'))->toBeNull();
@@ -108,24 +108,67 @@ it('keeps a course open that another grant opens, whatever the failed subscripti
     event(new SubscriptionCycleFailed(subscription()));
 
     expect(Courses::canAccess('buyer', 'club'))->toBeTrue()
-        ->and(Courses::hold('buyer', 'club'))->toMatchArray(['subscription_id' => '1', 'blocks' => false]);
+        ->and(Courses::hold('buyer', 'club'))->toMatchArray(['subscription_id' => 'sub_provider_1', 'blocks' => false]);
 });
 
 it('does not let the renewal of one subscription lift the hold another set', function () {
     event(new SubscriptionStarted(subscription()));
     event(new SubscriptionCycleFailed(subscription()));
 
-    event(new SubscriptionRenewed(subscription(['id' => 9, 'times_charged' => 3, 'paymentRefs' => ['tr_other']])));
+    event(new SubscriptionRenewed(subscription(['id' => 9, 'provider_id' => 'sub_other', 'times_charged' => 3, 'paymentRefs' => ['tr_other']])));
 
     expect(Courses::canAccess('buyer', 'club'))->toBeFalse();
 });
 
-it('keeps a hold set by hand absolute', function () {
-    Entitlements::grant(new SubjectReference('user', 'buyer'), 'membership', 'manual', 'lifetime');
+it('holds back a grant payments wrote under the subscription number, as its renewal fallback does', function () {
+    // EntitlementsBridge::extendFor(): no grant to renew, so it grants with
+    // the subscription's provider id as the reference, not a payment's.
+    Entitlements::revoke(Entitlements::forSubject(new SubjectReference('user', 'buyer'))->where('product_slug', 'membership')->first(), 'test');
+    Entitlements::grant(new SubjectReference('user', 'buyer'), 'membership', 'statamic-payments', 'sub_provider_1');
 
-    Courses::suspendAccess('buyer', 'club');
+    event(new SubscriptionCycleFailed(subscription(['paymentRefs' => []])));
 
     expect(Courses::canAccess('buyer', 'club'))->toBeFalse();
+});
+
+it('shows the provider subscription number on the hold', function () {
+    event(new SubscriptionCycleFailed(subscription()));
+
+    expect(Courses::hold('buyer', 'club')['subscription_id'])->toBe('sub_provider_1');
+});
+
+describe('a hold set by hand', function () {
+    beforeEach(function () {
+        Entitlements::grant(new SubjectReference('user', 'buyer'), 'membership', 'manual', 'lifetime');
+        Courses::suspendAccess('buyer', 'club');
+    });
+
+    it('closes the course whatever grants the learner holds', function () {
+        expect(Courses::canAccess('buyer', 'club'))->toBeFalse();
+    });
+
+    it('is not lifted by a renewal or a new purchase', function () {
+        event(new SubscriptionRenewed(subscription(['times_charged' => 1])));
+        event(new SubscriptionStarted(subscription(['id' => 5, 'provider_id' => 'sub_new'])));
+
+        expect(Courses::canAccess('buyer', 'club'))->toBeFalse();
+    });
+
+    it('is lifted by restoreAccess()', function () {
+        Courses::restoreAccess('buyer', 'club');
+
+        expect(Courses::canAccess('buyer', 'club'))->toBeTrue();
+    });
+
+    it('is not got round through somebody else\'s team', function () {
+        tap(User::make()->id('boss')->email('boss@example.test'))->save();
+        $this->makeCourse('club-team', ['product' => 'membership', 'team_seats' => 3]);
+        Entitlements::grant(new SubjectReference('user', 'boss'), 'membership', 'test');
+        Courses::addTeamMember(User::find('boss'), 'club-team', 'buyer@example.test');
+        Courses::suspendAccess('buyer', 'club-team');
+
+        expect(Courses::canAccess('buyer', 'club-team'))->toBeFalse();
+    });
 });
 
 it('matches a course through its bundles as well', function () {

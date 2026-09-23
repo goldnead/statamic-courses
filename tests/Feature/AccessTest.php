@@ -64,6 +64,18 @@ it('keeps a course closed with no access provider at all', function () {
     expect(Courses::canAccess('user-1', 'cvt-101'))->toBeFalse();
 });
 
+it('finds a grant statamic-payments wrote to the buyer\'s email address, with no resolver on the site', function () {
+    // What payments grants under when no SubjectResolver knows the address:
+    // the pair (email, address), lowercased.
+    Entitlements::grant(new SubjectReference('email', 'buyer@example.test'), 'cvt-101', 'statamic-payments', 'tr_1');
+    $buyer = User::make()->id('buyer-1')->email('Buyer@Example.test');
+    $buyer->save();
+
+    expect(Courses::canAccess($buyer, 'cvt-101'))->toBeTrue()
+        ->and(Courses::canAccess('buyer-1', 'cvt-101'))->toBeTrue()
+        ->and(Courses::canAccess('someone-else', 'cvt-101'))->toBeFalse();
+});
+
 it('refuses a guest and an unknown course', function () {
     expect(Courses::canAccess(null, 'cvt-101'))->toBeFalse()
         ->and(Courses::canAccess('user-1', 'nope'))->toBeFalse();

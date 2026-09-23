@@ -80,16 +80,26 @@ class PaymentsBridge
         });
     }
 
+    /**
+     * The provider's subscription number (what support finds at Stripe or
+     * Mollie), the local id only when there is none.
+     */
     protected function idOf(object $subscription): ?string
     {
-        $id = $subscription->id ?? null;
+        foreach ([$subscription->provider_id ?? null, $subscription->id ?? null] as $id) {
+            if (is_scalar($id) && (string) $id !== '') {
+                return (string) $id;
+            }
+        }
 
-        return is_scalar($id) && (string) $id !== '' ? (string) $id : null;
+        return null;
     }
 
     /**
      * The references payments wrote onto this subscription's grants: the
-     * provider ids of its payments (the first one and every cycle).
+     * provider ids of its payments (the first one and every cycle), and the
+     * subscription's own provider id, which the renewal writes when it finds
+     * no grant to extend (EntitlementsBridge::extendFor()).
      *
      * @return list<string>
      */
@@ -102,6 +112,8 @@ class PaymentsBridge
         } catch (Throwable) {
             $refs = [];
         }
+
+        $refs[] = $subscription->provider_id ?? null;
 
         return array_values(array_unique(array_filter(array_map(
             fn ($ref): string => is_scalar($ref) ? (string) $ref : '',

@@ -81,7 +81,11 @@ class ProgressController extends CpController
 
         abort_if($course === null, 404);
 
-        app(CourseProgress::class)->paymentRecovered($row->user_id, $course['slug'], null, 'released_in_cp');
+        // Both holds, the manual one included: this is the one place a
+        // person decides to lift it.
+        $courses = app(CourseProgress::class);
+        $courses->restoreAccess($row->user_id, $course['slug'], 'released_in_cp');
+        $courses->resumeDrip($row->user_id, $course['slug'], 'released_in_cp');
 
         return back()->with('success', __('courses::cp.hold_released'));
     }

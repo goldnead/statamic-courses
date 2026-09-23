@@ -47,6 +47,9 @@ class CourseProgress
      */
     public const ACKNOWLEDGEABLE_TYPES = ['text', 'milestone', 'coaching', 'exercise'];
 
+    /** The source of a payment hold whose subscription the caller did not name. */
+    public const UNNAMED_PAYMENT = 'payment';
+
     public function __construct(
         protected CourseRepository $courses,
         protected LockResolver $locks,
@@ -88,6 +91,11 @@ class CourseProgress
         $course = $this->courses->findCourse($courseSlug);
 
         if ($course === null || $user === null) {
+            return false;
+        }
+
+        // A hold set by hand is absolute: no grant and no team seat gets past it.
+        if ($this->holds->isManual($user, $course['id'])) {
             return false;
         }
 
@@ -270,7 +278,9 @@ class CourseProgress
 
         match ($course['on_payment_failure']) {
             'pause_drip' => $this->pauseDrip($user, $courseSlug, 'payment_failed'),
-            'revoke' => $this->suspendAccess($user, $courseSlug, 'payment_failed', $subscriptionId, $grantRefs),
+            // Without a subscription id (a site that bills elsewhere) the hold
+            // is still a payment hold, so paymentRecovered() can lift it.
+            'revoke' => $this->suspendAccess($user, $courseSlug, 'payment_failed', $subscriptionId ?? self::UNNAMED_PAYMENT, $grantRefs),
             default => null,
         };
 
@@ -283,8 +293,8 @@ class CourseProgress
      * changed in between cannot strand a learner.
      *
      * With `$subscriptionId` (a renewal), a hold another subscription set
-     * stays: that one has still not been paid. Without it (a new purchase,
-     * a manual release), every hold goes.
+     * stays: that one has still not been paid. Without it (a new purchase),
+     * every payment hold goes. A hold set by hand stays either way.
      */
     public function paymentRecovered(mixed $user, string $courseSlug, ?string $subscriptionId = null, string $reason = 'payment_recovered'): void
     {
@@ -303,11 +313,12 @@ class CourseProgress
             $this->resumeDrip($user, $courseSlug, $reason);
         }
 
-        $heldByOther = $subscriptionId !== null
-            && $enrollment?->suspended_by_subscription_id !== null
-            && $enrollment->suspended_by_subscription_id !== $subscriptionId;
+        // A hold set by hand is not a payment matter: only restoreAccess()
+        // (or the Control Panel) lifts it, never a renewal or a purchase.
+        $source = $enrollment?->suspended_by_subscription_id;
+        $lift = $source !== null && ($subscriptionId === null || $source === $subscriptionId);
 
-        if ($enrollment?->access_suspended_at !== null && ! $heldByOther) {
+        if ($enrollment?->access_suspended_at !== null && $lift) {
             $this->restoreAccess($user, $courseSlug, $reason);
         }
     }
@@ -316,7 +327,7 @@ class CourseProgress
      * Every learner with a payment hold or a paused drip, per course, for the
      * Control Panel.
      *
-     * @return list<array{enrollment_id: int, user_id: string, email: string|null, course: string, course_title: string, kind: string, since: string|null, subscription_id: string|null}>
+     * @return list<array{enrollment_id: int, user_id: string, email: string|null, course: string, course_title: string, kind: string, since: string|null, subscription_id: string|null, manual: bool, blocks: bool}>
      */
     public function holds(): array
     {
@@ -335,7 +346,12 @@ class CourseProgress
                 'course_title' => $courses[$enrollment->course_entry_id]['title'],
                 'kind' => $enrollment->access_suspended_at !== null ? 'suspended' : 'paused',
                 'since' => ($enrollment->access_suspended_at ?? $enrollment->drip_paused_at)?->toIso8601String(),
-                'subscription_id' => $enrollment->suspended_by_subscription_id,
+                'subscription_id' => $enrollment->suspended_by_subscription_id === self::UNNAMED_PAYMENT ? null : $enrollment->suspended_by_subscription_id,
+                // Set by hand rather than by a failed payment.
+                'manual' => $enrollment->access_suspended_at !== null && $enrollment->suspended_by_subscription_id === null,
+                // Whether it shuts the course right now: another purchase may keep it open.
+                'blocks' => $enrollment->access_suspended_at !== null
+                    && $this->holds->blocks($enrollment->user_id, $courses[$enrollment->course_entry_id]),
             ])
             ->values()
             ->all();

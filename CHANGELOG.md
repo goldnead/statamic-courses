@@ -25,6 +25,11 @@
   `courses_team_members`, `POST /!/courses/team`, `{{ courses:team }}`,
   `{{ courses:team_form }}`); a bundle's team covers all its courses.
 - Calendar drip days are counted in `statamic.system.display_timezone`.
+- Access is also looked up under the learner's email address (subject type `email`), where
+  statamic-payments grants on a site without a SubjectResolver.
+- A hold set by hand is absolute: no grant, team seat, renewal or purchase gets past it; only
+  `restoreAccess()` or the Control Panel lifts it.
+- `courses:install --dry-run` saves nothing, also on a fresh site ("would create").
 - Events `LearnerEnrolled`, `LessonUnlocked`, `QuizPassed`, `QuizFailed`, `DripPaused`,
   `DripResumed`, `CourseAccessSuspended`, `CourseAccessRestored`, `TeamMemberAdded`,
   `TeamMemberRemoved`.

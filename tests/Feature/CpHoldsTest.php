@@ -2,6 +2,8 @@
 
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Models\Enrollment;
+use Goldnead\Entitlements\Facades\Entitlements;
+use Goldnead\Entitlements\Support\SubjectReference;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use Statamic\Facades\Role;
@@ -36,6 +38,8 @@ it('lists every payment hold on the progress screen, with what it is and where i
             ->where('holds.0.email', 'held@example.test')
             ->where('holds.0.kind', 'suspended')
             ->where('holds.0.subscription_id', 'sub_7')
+            ->where('holds.0.blocks', true)
+            ->where('holds.0.manual', false)
             ->where('holds.1.kind', 'paused')
             ->where('canRelease', false));
 });
@@ -51,6 +55,29 @@ it('lets somebody with the permission lift a hold, and nobody else', function ()
 
     $this->actingAs(holdsCpUser(['view course progress', 'manage course holds']))->post($url)->assertRedirect();
     expect(Courses::hold('held', 'club'))->toBeNull();
+});
+
+it('tells a hold that shuts the course from one another purchase keeps open, and marks manual holds', function () {
+    Entitlements::grant(new SubjectReference('user', 'held'), 'club', 'manual', 'lifetime');
+    $this->makeCourse('closed-by-hand', ['title' => 'Hand']);
+    Courses::suspendAccess('held', 'closed-by-hand');
+
+    $holds = collect(Courses::holds())->keyBy('course');
+
+    expect($holds['club'])->toMatchArray(['blocks' => false, 'manual' => false])
+        ->and($holds['closed-by-hand'])->toMatchArray(['blocks' => true, 'manual' => true]);
+});
+
+it('lifts a manual hold from the CP as well', function () {
+    $this->makeCourse('closed-by-hand', ['title' => 'Hand']);
+    Courses::suspendAccess('held', 'closed-by-hand');
+    $enrollment = Enrollment::query()->whereNotNull('access_suspended_at')->whereNull('suspended_by_subscription_id')->first();
+
+    $this->actingAs(holdsCpUser(['view course progress', 'manage course holds']))
+        ->post(cp_route('courses.holds.release', $enrollment->getKey()))
+        ->assertRedirect();
+
+    expect(Courses::hold('held', 'closed-by-hand'))->toBeNull();
 });
 
 it('restarts a paused drip from the same action', function () {

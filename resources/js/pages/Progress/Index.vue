@@ -1,10 +1,12 @@
 <script setup>
+import { ref } from 'vue';
 import { Head, Link, router } from '@statamic/cms/inertia';
 import { dateFormatter } from '@statamic/cms/api';
 import {
     Badge,
     Button,
     CommandPaletteItem,
+    ConfirmationModal,
     Description,
     DocsCallout,
     DropdownItem,
@@ -30,8 +32,26 @@ const props = defineProps({
     canRelease: { type: Boolean, default: false },
 });
 
-function release(row) {
-    router.post(row.release_url, {}, { preserveScroll: true });
+// The hold asked about in the confirmation, or null while nothing is asked.
+const releasing = ref(null);
+const releaseBusy = ref(false);
+
+function release() {
+    releaseBusy.value = true;
+    router.post(releasing.value.release_url, {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            releaseBusy.value = false;
+            releasing.value = null;
+        },
+    });
+}
+
+function holdBadge(row) {
+    if (row.kind === 'paused') return { color: 'amber', text: __('courses::cp.hold_paused') };
+    if (!row.blocks) return { color: 'green', text: __('courses::cp.hold_open_elsewhere') };
+
+    return { color: 'red', text: __('courses::cp.hold_suspended') };
 }
 
 const docsUrl = 'https://docs.adriangoldner.dev/courses/';
@@ -154,11 +174,7 @@ function formatDate(value) {
                     <template #cell-email="{ row }">{{ row.email || row.user_id }}</template>
 
                     <template #cell-kind="{ row }">
-                        <Badge
-                            pill
-                            :color="row.kind === 'suspended' ? 'red' : 'amber'"
-                            :text="row.kind === 'suspended' ? __('courses::cp.hold_suspended') : __('courses::cp.hold_paused')"
-                        />
+                        <Badge pill :color="holdBadge(row).color" :text="holdBadge(row).text" />
                     </template>
 
                     <template #cell-since="{ row }">
@@ -166,14 +182,26 @@ function formatDate(value) {
                     </template>
 
                     <template #cell-subscription_id="{ row }">
-                        <span v-if="row.subscription_id">{{ row.subscription_id }}</span>
+                        <span v-if="row.subscription_id" class="font-mono text-xs">{{ row.subscription_id }}</span>
+                        <span v-else-if="row.manual">{{ __('courses::cp.hold_manual') }}</span>
                         <span v-else class="text-gray-500 dark:text-gray-400">&mdash;</span>
                     </template>
 
                     <template #prepended-row-actions="{ row }">
-                        <DropdownItem v-if="canRelease" :text="__('courses::cp.hold_release')" icon="padlock-unlocked" @click="release(row)" />
+                        <DropdownItem v-if="canRelease" :text="__('courses::cp.hold_release')" icon="padlock-unlocked" @click="releasing = row" />
                     </template>
                 </Listing>
+
+                <ConfirmationModal
+                    :open="releasing !== null"
+                    :title="__('courses::cp.hold_release')"
+                    :body-text="releasing ? __('courses::cp.hold_release_confirm', { learner: releasing.email || releasing.user_id, course: releasing.course_title }) : ''"
+                    :button-text="__('courses::cp.hold_release')"
+                    :busy="releaseBusy"
+                    @update:open="(open) => { if (!open) releasing = null; }"
+                    @confirm="release"
+                    @cancel="releasing = null"
+                />
             </template>
         </template>
 

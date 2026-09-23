@@ -30,6 +30,14 @@ class Holds
             ->first();
     }
 
+    /** A hold set by hand, not by a failed subscription. */
+    public function isManual(mixed $user, string $courseId): bool
+    {
+        $hold = $this->suspension($user, $courseId);
+
+        return $hold !== null && $hold->suspended_by_subscription_id === null;
+    }
+
     /**
      * @param  array<string, mixed>  $course
      */
@@ -41,11 +49,15 @@ class Holds
             return false;
         }
 
-        if ($hold->suspended_by_subscription_id === null || ! $this->access instanceof EntitlementsCourseAccess) {
+        $refs = array_values(array_map('strval', $hold->suspended_grant_refs ?? []));
+
+        // By hand, or for a payment whose grants nobody named: nothing to
+        // tell apart, so the course is shut.
+        if ($hold->suspended_by_subscription_id === null || $refs === [] || ! $this->access instanceof EntitlementsCourseAccess) {
             return true;
         }
 
-        return ! $this->access->allowsExcept($user, $course, array_values(array_map('strval', $hold->suspended_grant_refs ?? [])));
+        return ! $this->access->allowsExcept($user, $course, $refs);
     }
 
     /**

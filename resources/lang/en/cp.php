@@ -26,8 +26,11 @@ return [
     'empty_docs_description' => 'Structure, locks, drip and the Antlers tags.',
 
     'permission_holds' => 'Lift payment holds',
-    'holds_heading' => 'Payment holds',
-    'holds_help' => 'Learners whose subscription payment failed: the course is closed or the drip paused until the payment arrives.',
+    'holds_heading' => 'Holds',
+    'holds_help' => 'Learners whose subscription payment failed, and holds set by hand: the course is closed or the drip paused. A payment hold lifts itself once the payment arrives; a hold set by hand only here.',
+    'hold_open_elsewhere' => 'Open through another purchase',
+    'hold_manual' => 'Set by hand',
+    'hold_release_confirm' => 'Lift the hold for :learner in :course? The course opens again and a paused drip carries on.',
     'col_learner' => 'Learner',
     'col_hold' => 'Hold',
     'col_since' => 'Since',

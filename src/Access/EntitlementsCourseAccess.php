@@ -3,6 +3,7 @@
 namespace Goldnead\Courses\Access;
 
 use Goldnead\Courses\Contracts\CourseAccess;
+use Goldnead\Courses\Support\Learner;
 use Goldnead\Courses\Support\LearnerId;
 use Goldnead\Entitlements\EntitlementManager;
 use Goldnead\Entitlements\Support\StateResolver;
@@ -38,17 +39,41 @@ class EntitlementsCourseAccess implements CourseAccess
             return false;
         }
 
-        $subject = $this->subject($user);
-
-        // The course's own product, then every bundle that lists the course.
-        foreach ([$course['product'], ...($course['bundles'] ?? [])] as $product) {
-            if (is_string($product) && $product !== '' && $this->entitlements->allows($subject, $product)) {
-                return true;
+        foreach ($this->subjects($user) as $subject) {
+            // The course's own product, then every bundle that lists the course.
+            foreach ([$course['product'], ...($course['bundles'] ?? [])] as $product) {
+                if (is_string($product) && $product !== '' && $this->entitlements->allows($subject, $product)) {
+                    return true;
+                }
             }
         }
 
         return false;
     }
+
+    /**
+     * Every subject a grant for this learner may sit under: the user (model,
+     * reference by id), and the user's email address as statamic-payments
+     * writes it when the site has no SubjectResolver that knows the address
+     * (`email`, lowercased). Without the second, a buyer on such a site paid
+     * and could not open the course.
+     *
+     * @return list<Model|SubjectReference>
+     */
+    protected function subjects(mixed $user): array
+    {
+        $subjects = [$this->subject($user)];
+        $email = Learner::email($user);
+
+        if ($email !== null && ! ($subjects[0] instanceof SubjectReference && $subjects[0]->type === self::EMAIL_TYPE)) {
+            $subjects[] = new SubjectReference(self::EMAIL_TYPE, $email);
+        }
+
+        return $subjects;
+    }
+
+    /** The subject type statamic-payments grants under when it only has an address. */
+    public const EMAIL_TYPE = 'email';
 
     /**
      * allows(), leaving out the grants a failed subscription paid for.
@@ -77,17 +102,23 @@ class EntitlementsCourseAccess implements CourseAccess
             return false;
         }
 
-        $query = StateResolver::constrainToAccess(
-            $this->entitlements->forSubject($this->subject($user))->whereIn('product_slug', $products)
-        );
+        foreach ($this->subjects($user) as $subject) {
+            $query = StateResolver::constrainToAccess(
+                $this->entitlements->forSubject($subject)->whereIn('product_slug', $products)
+            );
 
-        if ($excludedRefs !== []) {
-            $query->where(fn ($grant) => $grant
-                ->where('source', '!=', self::PAYMENTS_SOURCE)
-                ->orWhereNotIn('source_ref', $excludedRefs));
+            if ($excludedRefs !== []) {
+                $query->where(fn ($grant) => $grant
+                    ->where('source', '!=', self::PAYMENTS_SOURCE)
+                    ->orWhereNotIn('source_ref', $excludedRefs));
+            }
+
+            if ($query->exists()) {
+                return true;
+            }
         }
 
-        return $query->exists();
+        return false;
     }
 
     /** What statamic-payments writes as a grant's source. */

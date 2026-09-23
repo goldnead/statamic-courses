@@ -26,7 +26,7 @@ class Install extends Command
     protected $signature = 'courses:install
         {--force : Overwrite blueprints that already exist}
         {--merge : Add missing fields and options to existing blueprints, change nothing else}
-        {--dry-run : With --merge, list what would be added without saving}';
+        {--dry-run : List what would be created or added, save nothing}';
 
     protected $description = 'Create the course and lesson collections with their blueprints.';
 
@@ -75,6 +75,12 @@ class Install extends Command
             return;
         }
 
+        if ($this->option('dry-run')) {
+            $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'would create');
+
+            return;
+        }
+
         Collection::make($handle)->title($title)->routes($route)->save();
 
         $this->components->twoColumnDetail("Collection <comment>{$handle}</comment>", 'created');
@@ -97,6 +103,12 @@ class Install extends Command
 
         if ($existing && ! $this->option('force')) {
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'exists, kept');
+
+            return;
+        }
+
+        if ($this->option('dry-run')) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", $existing ? 'would overwrite' : 'would create');
 
             return;
         }

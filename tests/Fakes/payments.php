@@ -44,6 +44,7 @@ namespace Goldnead\Courses\Tests\Fakes {
                 public int $times_charged = 0,
                 public mixed $starts_at = null,
                 public array $paymentRefs = ['tr_first'],
+                public ?string $provider_id = 'sub_provider_1',
             ) {}
 
             public function payments(): Collection
