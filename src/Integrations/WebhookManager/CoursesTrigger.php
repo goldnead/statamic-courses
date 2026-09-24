@@ -50,8 +50,19 @@ class CoursesTrigger implements TriggerInterface
             site: null,
             locale: null,
             isReplay: (bool) ($context['replay'] ?? false),
-            eventAt: new \DateTimeImmutable,
+            // The moment itself, not the moment of sending.
+            eventAt: self::eventAt($payload),
         );
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    protected static function eventAt(array $payload): \DateTimeImmutable
+    {
+        $at = is_string($payload['occurred_at'] ?? null)
+            ? \DateTimeImmutable::createFromFormat(\DATE_ATOM, $payload['occurred_at'])
+            : false;
+
+        return $at === false ? new \DateTimeImmutable : $at;
     }
 
     /**

@@ -14,6 +14,8 @@ use Goldnead\Courses\Events\QuizFailed;
 use Goldnead\Courses\Events\QuizPassed;
 use Goldnead\Courses\Events\TeamMemberAdded;
 use Goldnead\Courses\Events\TeamMemberRemoved;
+use Goldnead\Courses\Models\Enrollment;
+use Goldnead\Courses\Models\TeamMember;
 use Goldnead\Courses\Support\Learner;
 use Statamic\Auth\User as StatamicUser;
 use Statamic\Entries\Entry as StatamicEntry;
@@ -50,17 +52,78 @@ final class WebhookPayload
     public static function for(string $handle, object $event): array
     {
         $body = self::body($event);
+        $subject = $body['course']['id'] ?? null;
+        [$key, $at] = self::moment($event);
+        $at ??= now();
 
         return [
             'event' => $handle,
-            'occurred_at' => now()->format(\DATE_ATOM),
+            // The same moment always gets the same id, however often it is
+            // sent: `<handle>:<subject_id>:<key>`, formed as in the payments
+            // addon. A receiver deduplicates on it; order is not guaranteed.
+            'event_id' => $handle.':'.$subject.':'.$key,
+            'occurred_at' => $at->format(\DATE_ATOM),
             'brand' => self::brand($event->brandId ?? null),
             // Named outright, as the payments addon does: the course the
             // moment belongs to, so "deliveries for this object" finds it.
             'subject_type' => 'course',
-            'subject_id' => $body['course']['id'] ?? null,
+            'subject_id' => $subject,
             ...$body,
         ];
+    }
+
+    /**
+     * What makes this moment this moment, and when it happened.
+     *
+     * The time comes from the row the moment wrote (lesson completed, drip
+     * paused, access suspended, enrolled, seat given) wherever there is one.
+     * Moments that happen once per learner and course are keyed by the
+     * learner alone. What neither leaves a timestamp nor happens only once
+     * (a resumed drip, restored access, a removed seat) is keyed by the time
+     * of the write that fired it.
+     *
+     * @return array{0: string, 1: \DateTimeInterface|null}
+     */
+    public static function moment(object $event): array
+    {
+        $atom = fn (?\DateTimeInterface $at): string => ($at ?? now())->format(\DATE_ATOM);
+
+        if ($event instanceof LessonCompleted) {
+            $at = $event->state->completed_at;
+
+            return [$event->state->user_id.':'.$event->state->lesson_slug.':'.$atom($at), $at];
+        }
+
+        if ($event instanceof TeamMemberAdded || $event instanceof TeamMemberRemoved) {
+            $row = $event instanceof TeamMemberAdded
+                ? TeamMember::query()->where('owner_id', $event->ownerId)->where('email', $event->email)->first()
+                : null;
+            $at = $row?->created_at;
+
+            return [$event->ownerId.':'.$event->email.':'.$atom($at), $at];
+        }
+
+        if ($event instanceof QuizPassed || $event instanceof QuizFailed) {
+            $attempt = $event->responseId !== null ? 'response-'.$event->responseId : $atom(null);
+
+            return [$event->userId.':'.$event->lessonSlug.':'.$attempt, null];
+        }
+
+        $enrollment = isset($event->userId, $event->courseId)
+            ? Enrollment::query()->where('user_id', $event->userId)->where('course_entry_id', $event->courseId)->first()
+            : null;
+
+        [$key, $at] = match (true) {
+            $event instanceof LearnerEnrolled => ['', $enrollment?->started_at],
+            $event instanceof CourseCompleted => ['', $enrollment?->completed_at],
+            $event instanceof LessonUnlocked => [':'.$event->lessonSlug, null],
+            $event instanceof DripPaused => [':'.$atom($enrollment?->drip_paused_at), $enrollment?->drip_paused_at],
+            $event instanceof CourseAccessSuspended => [':'.$atom($enrollment?->access_suspended_at), $enrollment?->access_suspended_at],
+            $event instanceof DripResumed, $event instanceof CourseAccessRestored => [':'.$atom($enrollment?->updated_at), $enrollment?->updated_at],
+            default => [':'.$atom(null), null],
+        };
+
+        return [($event->userId ?? '').$key, $at];
     }
 
     /**

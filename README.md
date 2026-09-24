@@ -233,14 +233,20 @@ it nothing is loaded; `courses.webhook_manager.enabled` (env `COURSES_WEBHOOK_MA
 `true`) switches the bridge off.
 
 A hook fires in the course's brand, so a webhook or console run with no brand current still reaches
-the hooks of the right brand. In the delivery log it is filed under the course.
+the hooks of the right brand. A course whose brand no longer exists sends nothing (logged), rather
+than reaching the hooks of whichever brand is current. In the delivery log it is filed under the
+course.
+
+A moment is sent after its database transaction commits, and not at all if it is rolled back.
+**Order is not guaranteed** (retries, queues): sort by `occurred_at` and deduplicate on `event_id`.
 
 Every payload starts with the same keys as the other suite addons:
 
 | Key | Value |
 |---|---|
 | `event` | the trigger handle |
-| `occurred_at` | ISO 8601 with offset |
+| `event_id` | `<handle>:<course id>:<key>`, the same for the same moment however often it is sent |
+| `occurred_at` | when the moment happened (ISO 8601 with offset), not when it was sent |
 | `brand` | `{id, handle}`, or `null` without statamic-brand-context |
 | `subject_type`, `subject_id` | `course` and the course entry id |
 

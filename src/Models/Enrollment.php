@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $access_suspended_at
  * @property string|null $suspended_by_subscription_id
  * @property list<string>|null $suspended_grant_refs
+ * @property Carbon|null $updated_at
  */
 class Enrollment extends Model
 {

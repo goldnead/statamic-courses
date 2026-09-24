@@ -1,11 +1,14 @@
 <?php
 
 use Goldnead\BrandContext\Models\Brand;
+use Goldnead\Courses\Events\LearnerEnrolled;
+use Goldnead\Courses\Events\LessonCompleted;
 use Goldnead\Courses\Events\QuizFailed;
 use Goldnead\Courses\Events\TeamMemberAdded;
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Integrations\WebhookManager\CoursesTrigger;
 use Goldnead\Courses\Integrations\WebhookManager\WebhookManagerBridge;
+use Goldnead\Courses\Models\LessonState;
 use Goldnead\WebhookManager\Domain\OutboundWebhook\Models\OutboundWebhook;
 use Goldnead\WebhookManager\Events\TriggerDetected;
 use Goldnead\WebhookManager\Facades\WebhookManager;
@@ -13,6 +16,7 @@ use Goldnead\WebhookManager\Jobs\ProcessOutboundDeliveryJob;
 use Goldnead\WebhookManager\ValueObjects\TriggerEvent;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Statamic\Facades\User;
@@ -81,6 +85,7 @@ it('sends enrolment and completion with the learner looked up, the course named 
         ->and($enrolled->sourceReference)->toBe($this->course)
         ->and($enrolled->payload)->toBe([
             'event' => 'courses.learner_enrolled',
+            'event_id' => 'courses.learner_enrolled:'.$this->course.':lena',
             'occurred_at' => $enrolled->payload['occurred_at'],
             'brand' => ['id' => $brand->id, 'handle' => $brand->handle],
             'subject_type' => 'course',
@@ -92,7 +97,7 @@ it('sends enrolment and completion with the learner looked up, the course named 
 
     // A lesson state row carries watch positions and item payloads; none of it goes out.
     $completed = $events['courses.lesson_completed']->payload;
-    expect(array_keys($completed))->toBe(['event', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'learner', 'course', 'lesson', 'source', 'completed_at'])
+    expect(array_keys($completed))->toBe(['event', 'event_id', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'learner', 'course', 'lesson', 'source', 'completed_at'])
         ->and($completed['lesson']['slug'])->toBe('eins')
         ->and($completed['source'])->toBe('manual')
         ->and($completed['completed_at'])->toBeString();
@@ -117,7 +122,7 @@ it('sends a quiz attempt with its score and result, and a team seat with owner a
     [$quiz, $seat] = detected();
 
     expect($quiz->triggerHandle)->toBe('courses.quiz_failed')
-        ->and(array_diff_key($quiz->payload, array_flip(['occurred_at', 'brand', 'subject_type', 'subject_id'])))->toBe([
+        ->and(array_diff_key($quiz->payload, array_flip(['event_id', 'occurred_at', 'brand', 'subject_type', 'subject_id'])))->toBe([
             'event' => 'courses.quiz_failed',
             'learner' => ['id' => 'lena', 'email' => 'lena@example.test', 'name' => 'Lena Sänger'],
             'course' => ['id' => $this->course, 'slug' => 'stimme', 'title' => 'Stimme im Chor'],
@@ -173,6 +178,56 @@ it('fires the hooks of the course\'s brand when no brand is current, as from a p
     $delivery = DB::table('webhook_deliveries')->where('trigger_type', 'courses.learner_enrolled')->sole();
     expect((int) $delivery->brand_id)->toBe($akademie->id)
         ->and(json_decode((string) $delivery->request_body, true)['payload']['brand'] ?? null)->toBe(['id' => $akademie->id, 'handle' => 'akademie']);
+});
+
+it('gives the same moment the same event_id and the moment\'s own time, however often it is sent', function () {
+    Event::fake([TriggerDetected::class]);
+    Courses::acknowledgeLesson('lena', 'stimme', 'eins');
+    $state = LessonState::query()->where('lesson_slug', 'eins')->sole();
+
+    $this->travel(5)->minutes();
+
+    // A second delivery of the same moment, as a replay would send it.
+    $again = WebhookManager::triggers()->get('courses.lesson_completed')->build(new LessonCompleted($state, 'manual'));
+    $first = collect(detected())->firstWhere('triggerHandle', 'courses.lesson_completed');
+
+    expect($again->payload['event_id'])->toBe($first->payload['event_id'])
+        ->and($first->payload['event_id'])->toBe('courses.lesson_completed:'.$this->course.':lena:eins:'.$state->completed_at->format(DATE_ATOM))
+        ->and($again->eventAt->format(DATE_ATOM))->toBe($state->completed_at->format(DATE_ATOM))
+        ->and($again->payload['occurred_at'])->toBe($state->completed_at->format(DATE_ATOM));
+});
+
+it('sends nothing for a moment whose brand does not exist, rather than the current brand\'s hooks', function () {
+    Queue::fake();
+    Log::spy();
+    outboundHook('courses.learner_enrolled', 'aktuell');
+
+    event(new LearnerEnrolled('lena', $this->course, 'stimme', 999));
+
+    Queue::assertNothingPushed();
+    $this->assertDatabaseCount('webhook_deliveries', 0);
+    Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'brand [999] does not exist'));
+});
+
+it('sends a moment only once its transaction is committed, and never after a rollback', function () {
+    Event::fake([TriggerDetected::class]);
+
+    try {
+        DB::transaction(function () {
+            Courses::enroll('lena', 'stimme');
+            throw new RuntimeException('rollback');
+        });
+    } catch (RuntimeException) {
+    }
+
+    expect(detected())->toBe([]);
+
+    DB::transaction(function () {
+        Courses::enroll('lena', 'stimme');
+        expect(detected())->toBe([]);
+    });
+
+    expect(collect(detected())->pluck('triggerHandle')->all())->toContain('courses.learner_enrolled');
 });
 
 it('never breaks the course write when the webhook manager throws', function () {
