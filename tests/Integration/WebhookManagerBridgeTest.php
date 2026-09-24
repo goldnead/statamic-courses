@@ -78,7 +78,7 @@ it('sends enrolment and completion with the learner looked up, the course named 
     $brand = app('brand-context')->current();
 
     expect($enrolled->sourceType)->toBe('courses')
-        ->and($enrolled->sourceReference)->toBe('course:'.$this->course.':user:lena')
+        ->and($enrolled->sourceReference)->toBe($this->course)
         ->and($enrolled->payload)->toBe([
             'event' => 'courses.learner_enrolled',
             'occurred_at' => $enrolled->payload['occurred_at'],
@@ -141,9 +141,12 @@ it('hands a lesson completion to the outbound webhook listening for it, and to n
     Courses::acknowledgeLesson('lena', 'stimme', 'eins');
 
     Queue::assertPushed(ProcessOutboundDeliveryJob::class, 1);
+    // Filed under the course in the delivery log, so it can be read from there.
     $this->assertDatabaseHas('webhook_deliveries', [
         'trigger_type' => 'courses.lesson_completed',
-        'trigger_reference' => 'course:'.$this->course.':user:lena',
+        'trigger_reference' => $this->course,
+        'subject_type' => 'courses',
+        'subject_id' => $this->course,
     ]);
     $this->assertDatabaseMissing('webhook_deliveries', ['trigger_type' => 'courses.quiz_passed']);
 });

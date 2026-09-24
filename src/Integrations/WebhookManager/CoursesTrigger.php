@@ -55,8 +55,10 @@ class CoursesTrigger implements TriggerInterface
     }
 
     /**
-     * `course:<id>:user:<id>` (a team member without an account: its email),
-     * what a delivery can be found by in the log.
+     * The course entry id: what the delivery log files a delivery under
+     * (subject `courses` + id). Not course and learner together: the log's
+     * subject columns hold 64 characters, two UUIDs do not fit, and the
+     * webhook manager leaves a subject that does not fit empty.
      *
      * @param  array<string, mixed>  $payload
      */
@@ -64,12 +66,6 @@ class CoursesTrigger implements TriggerInterface
     {
         $course = $payload['course']['id'] ?? null;
 
-        if (! is_string($course) || $course === '') {
-            return null;
-        }
-
-        $person = $payload['learner']['id'] ?? $payload['member']['id'] ?? $payload['member']['email'] ?? null;
-
-        return 'course:'.$course.(is_string($person) && $person !== '' ? ':user:'.$person : '');
+        return is_string($course) && $course !== '' ? $course : null;
     }
 }
