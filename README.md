@@ -225,6 +225,42 @@ progress or completed, the completion rate among those who started, how many are
 activity for `cp.stuck_after_days`, default 14) and the last activity. It sits in the suite's shared
 nav section when statamic-payments provides one, under Content otherwise.
 
+## Webhooks
+
+With [statamic-webhook-manager](https://github.com/goldnead/statamic-webhook-manager) installed,
+every course event is a trigger an outbound webhook can listen to (source type `courses`). Without
+it nothing is loaded; `courses.webhook_manager` (default `true`) switches the bridge off.
+
+A hook fires in the course's brand, so a webhook or console run with no brand current still reaches
+the hooks of the right brand.
+
+Every payload starts with the same three keys as the other suite addons:
+
+| Key | Value |
+|---|---|
+| `event` | the trigger handle |
+| `occurred_at` | ISO 8601 with offset |
+| `brand` | `{id, handle}`, or `null` without statamic-brand-context |
+
+People are looked up as Statamic users: `{id, email, name}`. A user that is not found is sent as
+`{id}` only. `course` is `{id, slug, title}`. Nothing else leaves the addon: no watch positions, no
+quiz answers, no lesson state rows.
+
+| Trigger | Fields after the frame |
+|---|---|
+| `courses.learner_enrolled` | `learner`, `course` |
+| `courses.lesson_completed` | `learner`, `course`, `lesson {id, slug}`, `source`, `completed_at` |
+| `courses.lesson_unlocked` | `learner`, `course`, `lesson {slug}`, `source` |
+| `courses.quiz_passed` | `learner`, `course`, `lesson {slug}`, `assessment`, `score`, `passed: true`, `result_key`, `response_id` |
+| `courses.quiz_failed` | as `quiz_passed`, `passed: false` |
+| `courses.course_completed` | `learner`, `course` |
+| `courses.drip_paused` | `learner`, `course`, `reason` (`payment_failed`, `manual`) |
+| `courses.drip_resumed` | `learner`, `course`, `reason`, `paused_seconds` |
+| `courses.access_suspended` | `learner`, `course`, `reason` (`payment_failed`, `manual`) |
+| `courses.access_restored` | `learner`, `course`, `reason` (`payment_recovered`, `manual`) |
+| `courses.team_member_added` | `member` (the user, or `{email}` without an account), `owner`, `course`, `product` |
+| `courses.team_member_removed` | as `team_member_added` |
+
 ## Access
 
 `Goldnead\Courses\Contracts\CourseAccess` is the seam. With statamic-entitlements installed it asks

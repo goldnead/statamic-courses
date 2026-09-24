@@ -59,6 +59,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Webhook Manager
+    |--------------------------------------------------------------------------
+    |
+    | With goldnead/statamic-webhook-manager installed, every course event is
+    | a trigger an outbound webhook can listen to (courses.quiz_passed, …).
+    | Without that addon this does nothing.
+    |
+    */
+
+    'webhook_manager' => true,
+
+    /*
+    |--------------------------------------------------------------------------
     | Lesson downloads
     |--------------------------------------------------------------------------
     |

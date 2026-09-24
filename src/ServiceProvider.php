@@ -8,6 +8,7 @@ use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Integrations\AssessmentsBridge;
 use Goldnead\Courses\Integrations\CourseMediaAccess;
 use Goldnead\Courses\Integrations\PaymentsBridge;
+use Goldnead\Courses\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\Entitlements\EntitlementManager;
 use Illuminate\Support\Facades\Event;
 use Statamic\Facades\Collection;
@@ -72,6 +73,9 @@ class ServiceProvider extends AddonServiceProvider
         // after the addon is how a sibling once overwrote Laravel's own `events`.
         $this->app->singleton(CourseProgress::class);
 
+        // A singleton, so the bridge's boot guard holds for the retry.
+        $this->app->singleton(WebhookManagerBridge::class);
+
         // On the resolving translator rather than in boot: nav and permission
         // labels are built before bootAddon() runs.
         $langPath = __DIR__.'/../resources/lang';
@@ -80,6 +84,38 @@ class ServiceProvider extends AddonServiceProvider
         if ($this->app->resolved('translator')) {
             $this->app['translator']->addNamespace('courses', $langPath);
         }
+    }
+
+    /**
+     * The webhook bridge is queued here, not from bootAddon(): Statamic runs
+     * bootAddon() inside an `app->booted()` callback, where a nested
+     * `booted()` fires at once, possibly before the webhook manager's own
+     * bootAddon(). Queued while the app is still booting, it runs after all.
+     */
+    public function boot(): void
+    {
+        parent::boot();
+
+        $this->registerWebhookManagerBridge();
+    }
+
+    /**
+     * Course events as webhook-manager triggers, when that addon is installed.
+     * A first attempt once everything booted, and a retry at the very end of
+     * the booted queue for installs where the first one still comes too early.
+     */
+    protected function registerWebhookManagerBridge(): self
+    {
+        $boot = function (): void {
+            $this->app->make(WebhookManagerBridge::class)->boot($this->app->make('events'));
+        };
+
+        $this->app->booted(function () use ($boot): void {
+            $boot();
+            $this->app->booted($boot);
+        });
+
+        return $this;
     }
 
     public function bootAddon(): void

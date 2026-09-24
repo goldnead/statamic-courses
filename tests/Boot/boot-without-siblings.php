@@ -9,13 +9,22 @@
  * Prints "booted" on success; a fatal error ends the process with its message.
  */
 
-require __DIR__.'/../../vendor/autoload.php';
+$loader = require __DIR__.'/../../vendor/autoload.php';
 
+// The webhook manager is a dev dependency so the live bridge test can run
+// against the real addon. Here the site must not have it: take its namespace
+// out of the autoloader, which is exactly what an install without it sees.
+$loader->setPsr4('Goldnead\\WebhookManager\\', []);
+
+use Goldnead\Courses\Events\LearnerEnrolled;
+use Goldnead\Courses\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\Courses\ServiceProvider;
 use Goldnead\Courses\Support\LessonBlocks;
 use Orchestra\Testbench\Foundation\Application;
 
 foreach ([
+    'Goldnead\\WebhookManager\\Facades\\WebhookManager',
+    'Goldnead\\WebhookManager\\Contracts\\TriggerInterface',
     'Goldnead\\PrivateMedia\\Contracts\\MediaAccess',
     'Goldnead\\PrivateMedia\\PrivateMedia',
     'Goldnead\\StatamicPayments\\Events\\SubscriptionStarted',
@@ -37,5 +46,10 @@ $app->register(ServiceProvider::class);
 
 // What a lesson page calls on the way to a private download.
 LessonBlocks::resourceFor('probe');
+
+// What the provider's booted callback does, and a course event after it:
+// neither may touch a webhook-manager class.
+$app->make(WebhookManagerBridge::class)->boot($app['events']);
+$app['events']->dispatch(new LearnerEnrolled('1', 'course-id', 'probe', null));
 
 echo "booted\n";

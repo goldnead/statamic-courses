@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (0.3.0)
+
+### Added
+- Webhook Manager triggers: with goldnead/statamic-webhook-manager installed, all twelve course
+  events are triggers an outbound webhook can listen to (`courses.learner_enrolled` …
+  `courses.team_member_removed`, source type `courses`), labelled in German and English. The
+  payload is chosen field by field (learner looked up as `{id, email, name}`, course
+  `{id, slug, title}`, brand `{id, handle}`, `occurred_at` in ISO 8601), documented in the README.
+  A hook fires in the course's brand, also when no brand is current. Optional: nothing of the
+  webhook manager is loaded without it, and a boot test in its own process proves that.
+- Config `courses.webhook_manager` (default `true`).
+
 ## 0.2.1 (2026-09-23)
 
 ### Fixed
