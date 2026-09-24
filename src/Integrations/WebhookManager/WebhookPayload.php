@@ -49,11 +49,17 @@ final class WebhookPayload
      */
     public static function for(string $handle, object $event): array
     {
+        $body = self::body($event);
+
         return [
             'event' => $handle,
-            'occurred_at' => now()->toIso8601String(),
+            'occurred_at' => now()->format(\DATE_ATOM),
             'brand' => self::brand($event->brandId ?? null),
-            ...self::body($event),
+            // Named outright, as the payments addon does: the course the
+            // moment belongs to, so "deliveries for this object" finds it.
+            'subject_type' => 'course',
+            'subject_id' => $body['course']['id'] ?? null,
+            ...$body,
         ];
     }
 

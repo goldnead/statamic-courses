@@ -229,18 +229,20 @@ nav section when statamic-payments provides one, under Content otherwise.
 
 With [statamic-webhook-manager](https://github.com/goldnead/statamic-webhook-manager) installed,
 every course event is a trigger an outbound webhook can listen to (source type `courses`). Without
-it nothing is loaded; `courses.webhook_manager` (default `true`) switches the bridge off.
+it nothing is loaded; `courses.webhook_manager.enabled` (env `COURSES_WEBHOOK_MANAGER`, default
+`true`) switches the bridge off.
 
 A hook fires in the course's brand, so a webhook or console run with no brand current still reaches
-the hooks of the right brand.
+the hooks of the right brand. In the delivery log it is filed under the course.
 
-Every payload starts with the same three keys as the other suite addons:
+Every payload starts with the same keys as the other suite addons:
 
 | Key | Value |
 |---|---|
 | `event` | the trigger handle |
 | `occurred_at` | ISO 8601 with offset |
 | `brand` | `{id, handle}`, or `null` without statamic-brand-context |
+| `subject_type`, `subject_id` | `course` and the course entry id |
 
 People are looked up as Statamic users: `{id, email, name}`. A user that is not found is sent as
 `{id}` only. `course` is `{id, slug, title}`. Nothing else leaves the addon: no watch positions, no

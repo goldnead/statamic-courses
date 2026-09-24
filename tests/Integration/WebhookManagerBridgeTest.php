@@ -83,6 +83,8 @@ it('sends enrolment and completion with the learner looked up, the course named 
             'event' => 'courses.learner_enrolled',
             'occurred_at' => $enrolled->payload['occurred_at'],
             'brand' => ['id' => $brand->id, 'handle' => $brand->handle],
+            'subject_type' => 'course',
+            'subject_id' => $this->course,
             'learner' => ['id' => 'lena', 'email' => 'lena@example.test', 'name' => 'Lena Sänger'],
             'course' => ['id' => $this->course, 'slug' => 'stimme', 'title' => 'Stimme im Chor'],
         ])
@@ -90,7 +92,7 @@ it('sends enrolment and completion with the learner looked up, the course named 
 
     // A lesson state row carries watch positions and item payloads; none of it goes out.
     $completed = $events['courses.lesson_completed']->payload;
-    expect(array_keys($completed))->toBe(['event', 'occurred_at', 'brand', 'learner', 'course', 'lesson', 'source', 'completed_at'])
+    expect(array_keys($completed))->toBe(['event', 'occurred_at', 'brand', 'subject_type', 'subject_id', 'learner', 'course', 'lesson', 'source', 'completed_at'])
         ->and($completed['lesson']['slug'])->toBe('eins')
         ->and($completed['source'])->toBe('manual')
         ->and($completed['completed_at'])->toBeString();
@@ -115,7 +117,7 @@ it('sends a quiz attempt with its score and result, and a team seat with owner a
     [$quiz, $seat] = detected();
 
     expect($quiz->triggerHandle)->toBe('courses.quiz_failed')
-        ->and(array_diff_key($quiz->payload, array_flip(['occurred_at', 'brand'])))->toBe([
+        ->and(array_diff_key($quiz->payload, array_flip(['occurred_at', 'brand', 'subject_type', 'subject_id'])))->toBe([
             'event' => 'courses.quiz_failed',
             'learner' => ['id' => 'lena', 'email' => 'lena@example.test', 'name' => 'Lena Sänger'],
             'course' => ['id' => $this->course, 'slug' => 'stimme', 'title' => 'Stimme im Chor'],
@@ -145,7 +147,7 @@ it('hands a lesson completion to the outbound webhook listening for it, and to n
     $this->assertDatabaseHas('webhook_deliveries', [
         'trigger_type' => 'courses.lesson_completed',
         'trigger_reference' => $this->course,
-        'subject_type' => 'courses',
+        'subject_type' => 'course',
         'subject_id' => $this->course,
     ]);
     $this->assertDatabaseMissing('webhook_deliveries', ['trigger_type' => 'courses.quiz_passed']);

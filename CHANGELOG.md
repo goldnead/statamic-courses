@@ -10,7 +10,7 @@
   `{id, slug, title}`, brand `{id, handle}`, `occurred_at` in ISO 8601), documented in the README.
   A hook fires in the course's brand, also when no brand is current. Optional: nothing of the
   webhook manager is loaded without it, and a boot test in its own process proves that.
-- Config `courses.webhook_manager` (default `true`).
+- Config `courses.webhook_manager.enabled` (env `COURSES_WEBHOOK_MANAGER`, default `true`).
 
 ## 0.2.1 (2026-09-23)
 

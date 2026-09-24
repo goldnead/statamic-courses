@@ -62,7 +62,7 @@ class WebhookManagerBridge
 
     public static function available(): bool
     {
-        return (bool) config('courses.webhook_manager', true)
+        return (bool) config('courses.webhook_manager.enabled', true)
             && class_exists(self::FACADE)
             && interface_exists(self::TRIGGER_INTERFACE);
     }

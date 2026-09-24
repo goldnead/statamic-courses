@@ -68,7 +68,9 @@ return [
     |
     */
 
-    'webhook_manager' => true,
+    'webhook_manager' => [
+        'enabled' => (bool) env('COURSES_WEBHOOK_MANAGER', true),
+    ],
 
     /*
     |--------------------------------------------------------------------------
