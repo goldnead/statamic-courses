@@ -10,7 +10,7 @@
   `{id, slug, title}`, brand `{id, handle}`, `occurred_at` in ISO 8601), documented in the README.
   A hook fires in the course's brand, also when no brand is current. Optional: nothing of the
   webhook manager is loaded without it, and a boot test in its own process proves that.
-- Every webhook payload carries a stable `event_id` (`<handle>:<course id>:<key>`), and
+- Every webhook payload carries a stable `event_id` (`sha1(handle|<type>:<id>|<row time>)`, as in every suite addon), and
   `occurred_at` is the time of the moment. Sent after the transaction commits, never after a
   rollback; a course whose brand does not exist sends nothing instead of the current brand's hooks.
 - Config `courses.webhook_manager.enabled` (env `COURSES_WEBHOOK_MANAGER`, default `true`).

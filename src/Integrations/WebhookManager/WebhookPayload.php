@@ -17,6 +17,7 @@ use Goldnead\Courses\Events\TeamMemberRemoved;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\TeamMember;
 use Goldnead\Courses\Support\Learner;
+use Illuminate\Support\Facades\Log;
 use Statamic\Auth\User as StatamicUser;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
@@ -33,9 +34,12 @@ use Throwable;
  *
  * Every payload has the same frame as its siblings in the suite:
  *
- *     event        the trigger handle, e.g. courses.quiz_passed
- *     occurred_at  ISO 8601 with offset
- *     brand        {id, handle} or null
+ *     event         the trigger handle, e.g. courses.quiz_passed
+ *     event_id      sha1(handle|<type>:<id>|<the row's time>), stable per moment
+ *     occurred_at   the moment's own time, ISO 8601 with offset
+ *     brand         {id, handle} or null
+ *     subject_type  course
+ *     subject_id    the course entry id
  *
  * People are looked up as Statamic users: `{id, email, name}`. A user that
  * cannot be found (deleted, or an id from another system) is sent as `{id}`
@@ -53,16 +57,14 @@ final class WebhookPayload
     {
         $body = self::body($event);
         $subject = $body['course']['id'] ?? null;
-        [$key, $at] = self::moment($event);
-        $at ??= now();
+        $parts = self::momentParts($event);
 
         return [
             'event' => $handle,
             // The same moment always gets the same id, however often it is
-            // sent: `<handle>:<subject_id>:<key>`, formed as in the payments
-            // addon. A receiver deduplicates on it; order is not guaranteed.
-            'event_id' => $handle.':'.$subject.':'.$key,
-            'occurred_at' => $at->format(\DATE_ATOM),
+            // sent. A receiver deduplicates on it; order is not guaranteed.
+            'event_id' => self::eventId($handle, $parts),
+            'occurred_at' => self::occurredAt($parts)->format(\DATE_ATOM),
             'brand' => self::brand($event->brandId ?? null),
             // Named outright, as the payments addon does: the course the
             // moment belongs to, so "deliveries for this object" finds it.
@@ -73,57 +75,137 @@ final class WebhookPayload
     }
 
     /**
-     * What makes this moment this moment, and when it happened.
+     * `sha1(handle|part|part…)`, dates as DATE_ATOM: the same recipe in every
+     * addon of the suite.
      *
-     * The time comes from the row the moment wrote (lesson completed, drip
-     * paused, access suspended, enrolled, seat given) wherever there is one.
-     * Moments that happen once per learner and course are keyed by the
-     * learner alone. What neither leaves a timestamp nor happens only once
-     * (a resumed drip, restored access, a removed seat) is keyed by the time
-     * of the write that fired it.
-     *
-     * @return array{0: string, 1: \DateTimeInterface|null}
+     * @param  list<mixed>  $parts
      */
-    public static function moment(object $event): array
+    public static function eventId(string $handle, array $parts): string
     {
-        $atom = fn (?\DateTimeInterface $at): string => ($at ?? now())->format(\DATE_ATOM);
+        return sha1(implode('|', array_map(
+            fn ($part) => $part instanceof \DateTimeInterface ? $part->format(\DATE_ATOM) : (string) $part,
+            [$handle, ...$parts],
+        )));
+    }
 
-        if ($event instanceof LessonCompleted) {
-            $at = $event->state->completed_at;
-
-            return [$event->state->user_id.':'.$event->state->lesson_slug.':'.$atom($at), $at];
+    /**
+     * The first date among the parts, the moment's own time. The clock only
+     * where no row records one.
+     *
+     * @param  list<mixed>  $parts
+     */
+    public static function occurredAt(array $parts): \DateTimeInterface
+    {
+        foreach ($parts as $part) {
+            if ($part instanceof \DateTimeInterface) {
+                return $part;
+            }
         }
 
-        if ($event instanceof TeamMemberAdded || $event instanceof TeamMemberRemoved) {
-            $row = $event instanceof TeamMemberAdded
-                ? TeamMember::query()->where('owner_id', $event->ownerId)->where('email', $event->email)->first()
-                : null;
-            $at = $row?->created_at;
+        return now();
+    }
 
-            return [$event->ownerId.':'.$event->email.':'.$atom($at), $at];
+    /**
+     * What separates this moment from every other moment of the same kind:
+     * the row it concerns as `<type>:<id>`, then the time that row records
+     * for it. Never the time of sending.
+     *
+     * A lesson unlock, a quiz attempt and a removed team seat leave no time
+     * of their own; they are told apart by learner, lesson and response, or
+     * owner and address.
+     *
+     * @return list<mixed>
+     */
+    public static function momentParts(object $event): array
+    {
+        if ($event instanceof LessonCompleted) {
+            return ['lesson_state:'.$event->state->id, $event->state->completed_at ?? ''];
+        }
+
+        if ($event instanceof TeamMemberAdded) {
+            $row = TeamMember::query()->where('owner_id', $event->ownerId)->where('email', $event->email)->first();
+
+            return $row !== null
+                ? ['team_member:'.$row->id, $row->created_at ?? '']
+                : ['course:'.$event->courseId, 'owner:'.$event->ownerId, 'member:'.$event->email, 'added'];
+        }
+
+        if ($event instanceof TeamMemberRemoved) {
+            return ['course:'.$event->courseId, 'owner:'.$event->ownerId, 'member:'.$event->email, 'removed'];
         }
 
         if ($event instanceof QuizPassed || $event instanceof QuizFailed) {
-            $attempt = $event->responseId !== null ? 'response-'.$event->responseId : $atom(null);
+            return ['course:'.$event->courseId, 'user:'.$event->userId, 'lesson:'.$event->lessonSlug, 'response:'.$event->responseId];
+        }
 
-            return [$event->userId.':'.$event->lessonSlug.':'.$attempt, null];
+        if ($event instanceof LessonUnlocked) {
+            return ['course:'.$event->courseId, 'user:'.$event->userId, 'lesson:'.$event->lessonSlug];
         }
 
         $enrollment = isset($event->userId, $event->courseId)
             ? Enrollment::query()->where('user_id', $event->userId)->where('course_entry_id', $event->courseId)->first()
             : null;
 
-        [$key, $at] = match (true) {
-            $event instanceof LearnerEnrolled => ['', $enrollment?->started_at],
-            $event instanceof CourseCompleted => ['', $enrollment?->completed_at],
-            $event instanceof LessonUnlocked => [':'.$event->lessonSlug, null],
-            $event instanceof DripPaused => [':'.$atom($enrollment?->drip_paused_at), $enrollment?->drip_paused_at],
-            $event instanceof CourseAccessSuspended => [':'.$atom($enrollment?->access_suspended_at), $enrollment?->access_suspended_at],
-            $event instanceof DripResumed, $event instanceof CourseAccessRestored => [':'.$atom($enrollment?->updated_at), $enrollment?->updated_at],
-            default => [':'.$atom(null), null],
-        };
+        if ($enrollment === null) {
+            return ['course:'.($event->courseId ?? ''), 'user:'.($event->userId ?? ''), $event::class];
+        }
 
-        return [($event->userId ?? '').$key, $at];
+        $row = 'enrollment:'.$enrollment->id;
+
+        return match (true) {
+            $event instanceof LearnerEnrolled => [$row, $enrollment->started_at ?? 'enrolled'],
+            $event instanceof CourseCompleted => [$row, $enrollment->completed_at ?? 'completed'],
+            $event instanceof DripPaused => [$row, $enrollment->drip_paused_at ?? 'drip_paused'],
+            $event instanceof CourseAccessSuspended => [$row, $enrollment->access_suspended_at ?? 'suspended'],
+            // The pause ended and its column was cleared: the write that
+            // cleared it is the moment's time.
+            $event instanceof DripResumed => [$row, $enrollment->updated_at ?? '', 'drip_resumed'],
+            $event instanceof CourseAccessRestored => [$row, $enrollment->updated_at ?? '', 'restored'],
+            default => [$row, $event::class],
+        };
+    }
+
+    /**
+     * Run the hand-over as the brand the moment names, or not at all.
+     *
+     * A brand that cannot be made current (deleted, a typo in a course's
+     * `brand` field) is not replaced by whichever brand is current: its hooks
+     * belong to another tenant. Logged, not delivered. No brand named, or no
+     * brand-context installed: runs as it is. The same rule as the payments
+     * addon's `WebhookPayload::runForBrand()`.
+     *
+     * @param  \Closure(): void  $callback
+     */
+    public static function runForBrand(?int $brand, \Closure $callback, string $handle): bool
+    {
+        if (! $brand || ! app()->bound('brand-context')) {
+            $callback();
+
+            return true;
+        }
+
+        $ran = false;
+
+        try {
+            app('brand-context')->runFor($brand, function () use ($callback, &$ran): void {
+                $ran = true;
+                $callback();
+            });
+
+            return true;
+        } catch (Throwable $e) {
+            if ($ran) {
+                throw $e;
+            }
+
+            Log::warning('statamic-courses: the course names a brand that cannot be set; the webhook was not delivered rather than sent through another brand\'s hooks.', [
+                'trigger' => $handle,
+                'brand_id' => $brand,
+                'exception' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**

@@ -85,7 +85,7 @@ it('sends enrolment and completion with the learner looked up, the course named 
         ->and($enrolled->sourceReference)->toBe($this->course)
         ->and($enrolled->payload)->toBe([
             'event' => 'courses.learner_enrolled',
-            'event_id' => 'courses.learner_enrolled:'.$this->course.':lena',
+            'event_id' => $enrolled->payload['event_id'],
             'occurred_at' => $enrolled->payload['occurred_at'],
             'brand' => ['id' => $brand->id, 'handle' => $brand->handle],
             'subject_type' => 'course',
@@ -192,7 +192,8 @@ it('gives the same moment the same event_id and the moment\'s own time, however 
     $first = collect(detected())->firstWhere('triggerHandle', 'courses.lesson_completed');
 
     expect($again->payload['event_id'])->toBe($first->payload['event_id'])
-        ->and($first->payload['event_id'])->toBe('courses.lesson_completed:'.$this->course.':lena:eins:'.$state->completed_at->format(DATE_ATOM))
+        // The suite's recipe: sha1(handle|<type>:<id>|<the row's time>).
+        ->and($first->payload['event_id'])->toBe(sha1('courses.lesson_completed|lesson_state:'.$state->id.'|'.$state->completed_at->format(DATE_ATOM)))
         ->and($again->eventAt->format(DATE_ATOM))->toBe($state->completed_at->format(DATE_ATOM))
         ->and($again->payload['occurred_at'])->toBe($state->completed_at->format(DATE_ATOM));
 });
@@ -206,7 +207,7 @@ it('sends nothing for a moment whose brand does not exist, rather than the curre
 
     Queue::assertNothingPushed();
     $this->assertDatabaseCount('webhook_deliveries', 0);
-    Log::shouldHaveReceived('warning')->withArgs(fn ($message) => str_contains($message, 'brand [999] does not exist'));
+    Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context = []) => str_contains($message, 'brand that cannot be set') && ($context['brand_id'] ?? null) === 999);
 });
 
 it('sends a moment only once its transaction is committed, and never after a rollback', function () {

@@ -245,7 +245,7 @@ Every payload starts with the same keys as the other suite addons:
 | Key | Value |
 |---|---|
 | `event` | the trigger handle |
-| `event_id` | `<handle>:<course id>:<key>`, the same for the same moment however often it is sent |
+| `event_id` | `sha1(handle\|<type>:<id>\|<time the row records>)`, the recipe of every suite addon; the same for the same moment however often it is sent |
 | `occurred_at` | when the moment happened (ISO 8601 with offset), not when it was sent |
 | `brand` | `{id, handle}`, or `null` without statamic-brand-context |
 | `subject_type`, `subject_id` | `course` and the course entry id |
