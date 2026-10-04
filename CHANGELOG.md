@@ -21,9 +21,13 @@
   `download_groups` (in the order a group first appears), `pages`. Links are signed only for
   somebody with access.
 - `{{ courses kind="material" }}` / `kind="course"`, and `kind` / `is_material` on every course.
-- Images in a material's text come from private-media's container and are signed per viewer like
-  the downloads; without access they are left out. Without private-media the field picks from the
-  public container and says so.
+- Images in a material's text are a Bard set "Image" (file from private-media's container, alt
+  text, caption) with a preview in the Control Panel, rendered as a signed figure for somebody
+  with access and left out, caption included, for everybody else. Without private-media the set
+  picks from the public container and says so. Image nodes from Bard's image button are still
+  read and protected.
+- `brand`: a choice of the brands by name on a multi-brand site; not installed on a single-brand
+  site, where `--merge` hides an older brand text field.
 - Downloads are entered as groups (a voicing, a part) with their files underneath; the format is
   taken from the file. Rows saved one file per row are still read.
 - `cover` (public image for a card, `cover_url` on every course).

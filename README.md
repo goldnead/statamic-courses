@@ -144,11 +144,14 @@ with none of the pacing: no progress is recorded, nobody is enrolled, no drip ru
 on the Course Progress screen. A sheet-music bundle, a workbook, a quick reference.
 
 - `cover`: a public image for the card in a member area (`cover_url` on every course).
-- `body`: Bard text. Its images are picked from statamic-private-media's container, because on a
-  paid material the figures are the content: each is rendered as a link signed for
-  `course:<slug>` for somebody with access, and left out for everybody else (no `<img>`, no
-  path). An image from a public container stays public. Without private-media the field picks
-  from the public container and says so in its instructions.
+- `body`: Bard text. Images go in as the set **Image** (file, alt text, caption), picked from
+  statamic-private-media's container, because on a paid material the figures are the content.
+  The Control Panel shows the file with its preview. Each image renders as a `<figure>` (partial
+  `courses::blocks.image`, the same as the lesson block) with a link signed for `course:<slug>`
+  for somebody with access, and is left out for everybody else, caption included (no `<img>`,
+  no path). An empty alt text falls back to the asset's own. Without private-media the set picks
+  from the public container and says so in its instructions. Image nodes saved with Bard's own
+  image button are still read and protected the same way.
 - `downloads`: one row per group (a voicing, a part), its files underneath, each with a label.
   The file is picked from private-media's container only and served through a link signed for
   `course:<slug>`, which courses answers with `Courses::canAccess()`; private-media checks it
@@ -162,7 +165,9 @@ In the Control Panel a material shows only these fields: product, bundles, seque
 payment failure, team seats and section rules are hidden once the kind is Material (their values
 stay and are ignored). The kind is a column in the entries listing. `courses:install --merge`
 gives fields an older blueprint already has the same condition and puts the Material section
-right behind the main one. It does not rename what the site has: a collection created before
+right behind the main one. The `brand` field is a choice of the site's brands by name on a
+multi-brand site (`--merge` adds brands created since); on a single-brand site it is not
+installed, and `--merge` hides the older brand text field. It does not rename what the site has: a collection created before
 German labels shipped stays "Courses", a section stays "Access and pacing"; rename those in the
 Control Panel if you like.
 
