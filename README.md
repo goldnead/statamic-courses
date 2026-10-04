@@ -1,7 +1,8 @@
 # Statamic Courses
 
 Courses for Statamic 6: modules and lessons as entries, a state per learner and lesson, sequencing,
-drip by schedule or by progress, and a progress rollup. Access to a course is asked of
+drip by schedule or by progress, and a progress rollup; and materials, pages with text and
+protected downloads that open like a course but carry no progress. Access to a course is asked of
 [statamic-entitlements](https://github.com/goldnead/statamic-entitlements). Antlers tags and a
 form route for the front end, and a "Course Progress" screen in the Control Panel.
 
@@ -31,7 +32,7 @@ routes as you like, `url` is then null and nothing breaks.
 
 ## Structure
 
-A **course** entry carries `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (see
+A **course** entry carries `kind` (`course`, the default, or `material`: see [Material](#material)), `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (see
 below) and `product`, the entitlements product that opens it (defaults to the course slug), plus
 `bundles`, `team_seats`, `on_payment_failure` and `section_audiences`.
 
@@ -122,7 +123,9 @@ purchase. statamic-entitlements has no seats of its own yet; the team lives in
 
 Besides the markdown `content` (kept, rendered first), a lesson has `blocks`: text, callout,
 columns, FAQ, video (YouTube and Vimeo become players; with statamic-consent installed they wait
-behind `{{ consent:gate }}` for the `youtube` or `vimeo` service), download and button.
+behind `{{ consent:gate }}` for the `youtube` or `vimeo` service), image (from private-media's
+container, signed for the course like a private download; without private-media from the public
+one, marked as public), download and button.
 
 A download marked “only for learners of this course” takes its file from its own field on
 statamic-private-media's container and is served through a link signed for `course:<slug>`.
@@ -131,6 +134,69 @@ members and bundle holders all get the file. Public and private downloads sit si
 Without private-media the toggle is not offered. `courses:install` points the public field at
 `courses.downloads.container` or the first container other than the private one. On a
 multi-brand site a download is checked in the brand of the request that fetches it.
+
+## Material
+
+A course entry has a **kind**: `course` (lessons, progress, sequencing, drip) or `material`. A
+course without the field is a course, so existing courses need no change. A material is a page
+with text and downloads, opened exactly like a course (`product`, `bundles`, teams, holds), but
+with none of the pacing: no progress is recorded, nobody is enrolled, no drip runs, and it is not
+on the Course Progress screen. A sheet-music bundle, a workbook, a quick reference.
+
+- `cover`: a public image for the card in a member area (`cover_url` on every course).
+- `body`: Bard text. Images go in as the set **Image** (file, alt text, caption), picked from
+  statamic-private-media's container, because on a paid material the figures are the content.
+  The Control Panel shows the file with its preview. Each image renders as a `<figure>` (partial
+  `courses::blocks.image`, the same as the lesson block) with a link signed for `course:<slug>`
+  for somebody with access, and is left out for everybody else, caption included (no `<img>`,
+  no path). An empty alt text falls back to the asset's own. Without private-media the set picks
+  from the public container and says so in its instructions. Image nodes saved with Bard's own
+  image button are still read and protected the same way.
+- `downloads`: one row per group (a voicing, a part), its files underneath, each with a label.
+  The file is picked from private-media's container only and served through a link signed for
+  `course:<slug>`, which courses answers with `Courses::canAccess()`; private-media checks it
+  again when the file is fetched. The format is the file extension. Without private-media
+  `courses:install` leaves the download list out: there is no protected way to serve it.
+- Lessons pointing at a material are further pages. They are never locked and record nothing;
+  their blocks render with `{{ courses:blocks }}` as usual. The lesson `image` block works the
+  same way as the text images: from private-media's container, signed, or left out.
+
+In the Control Panel a material shows only these fields: product, bundles, sequencing, drip,
+payment failure, team seats and section rules are hidden once the kind is Material (their values
+stay and are ignored). The kind is a column in the entries listing. `courses:install --merge`
+gives fields an older blueprint already has the same condition and puts the Material section
+right behind the main one. The `brand` field is a choice of the site's brands by name on a
+multi-brand site (`--merge` adds brands created since); on a single-brand site it is not
+installed, and `--merge` hides the older brand text field. It does not rename what the site has: a collection created before
+German labels shipped stays "Courses", a section stays "Access and pacing"; rename those in the
+Control Panel if you like.
+
+```antlers
+{{ courses kind="material" only="accessible" }}<a href="{{ url }}">{{ title }}</a>{{ /courses }}
+
+{{ courses:material course="baraye" }}
+    <h1>{{ title }}</h1>
+    {{ body }}
+    {{ download_groups }}
+        {{ if group }}<h2>{{ group }}</h2>{{ /if }}
+        {{ downloads }}<a href="{{ url }}">{{ label }}</a> {{ format }}, {{ size }}{{ /downloads }}
+    {{ /download_groups }}
+    {{ pages }}<a href="{{ url }}">{{ title }}</a>{{ /pages }}
+{{ /courses:material }}
+```
+
+`courses:material` takes the course entry in context when `course` is left out. It renders
+nothing for a guest, a learner without access and a course of kind `course`; super users see the
+text and pages for the live preview. `Courses::material($user, $slug)` gives the same data in PHP
+(downloads only when `$user` has access). For a material, `summary()`, `outline()`, `enroll()`
+and the drip writes answer null, and a lesson write is refused with reason `material`.
+
+Another addon that lists course entries (a picker for what a product opens, say) asks
+`Courses::kind($slugOrEntryId)`: `course`, `material`, or null for no such course. The raw field
+is `kind` on the entry; a missing value means `course`.
+
+How a material is sold is not this addon's business: a product in entitlements opens it, like a
+course.
 
 ## Quiz
 
@@ -212,7 +278,7 @@ The route needs a signed-in user with access to the course, carries CSRF, answer
 and otherwise redirects back or to a local `_redirect`. A refusal carries a reason code, as
 `{"error": "…"}` in JSON and as the flashed `courses` error (`{{ get_error:courses }}`) on a form
 post: `no_access` (403), `unknown_course` (404), `unknown_lesson`, `locked`, `proof_required`,
-`not_video`, `not_acknowledgeable` (422). `Courses::refusalReason()` gives the same answer in PHP.
+`not_video`, `not_acknowledgeable`, `material` (422). `Courses::refusalReason()` gives the same answer in PHP.
 
 In `courses:lessons`, a lesson a test-out completed has `status: skipped` and `is_skipped: true`;
 its `progress:status` stays `completed`. Switch it off with `COURSES_ROUTES_ENABLED=false`; the form tag then renders
@@ -222,7 +288,8 @@ nothing.
 
 **Course Progress** (permission `view course progress`): per course the learners, how many are in
 progress or completed, the completion rate among those who started, how many are stuck (no
-activity for `cp.stuck_after_days`, default 14) and the last activity. It sits in the suite's shared
+activity for `cp.stuck_after_days`, default 14) and the last activity. Materials record no
+progress and are not listed. It sits in the suite's shared
 nav section when statamic-payments provides one, under Content otherwise.
 
 ## Webhooks

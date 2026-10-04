@@ -24,6 +24,7 @@ use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\EventRecorder;
 use Goldnead\Courses\Support\Holds;
 use Goldnead\Courses\Support\LearnerId;
+use Goldnead\Courses\Support\MaterialContent;
 use Goldnead\Courses\Support\Teams;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -50,6 +51,9 @@ class CourseProgress
 
     /** The source of a payment hold whose subscription the caller did not name. */
     public const UNNAMED_PAYMENT = 'payment';
+
+    /** The enrollment writes that move the drip clock, refused for a material. */
+    protected const PACING_WRITES = ['billing', 'drip_paused', 'drip_resumed'];
 
     public function __construct(
         protected CourseRepository $courses,
@@ -148,20 +152,68 @@ class CourseProgress
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        if ($course === null) {
+        // A material has no drip clock to start and nobody "enrolls" in it.
+        if ($course === null || $course['is_material']) {
             return null;
         }
 
+        return $this->enrollmentFor($user, $course, announce: true);
+    }
+
+    /**
+     * The learner's enrollment row, created on first touch. LearnerEnrolled
+     * fires only for a course; a material keeps a row solely for a hold.
+     *
+     * @param  array<string, mixed>  $course
+     */
+    protected function enrollmentFor(mixed $user, array $course, bool $announce): Enrollment
+    {
         $enrollment = Enrollment::query()->createOrFirst(
             ['user_id' => LearnerId::of($user), 'course_entry_id' => $course['id']],
             ['current_week' => 1, 'started_at' => now()],
         );
 
-        if ($enrollment->wasRecentlyCreated) {
+        if ($announce && $enrollment->wasRecentlyCreated) {
             LearnerEnrolled::dispatch($enrollment->user_id, $course['id'], $course['slug'], CourseBrand::forEvent($course));
         }
 
         return $enrollment;
+    }
+
+    /**
+     * What a course entry is, `course` or `material`, by slug or by entry id;
+     * null when there is no such course. For a picker in another addon that
+     * labels materials ("Baraye (Material)") without reading the entry itself.
+     */
+    public function kind(string $courseSlugOrId): ?string
+    {
+        $course = $this->courses->findCourse($courseSlugOrId) ?? $this->courses->findCourseById($courseSlugOrId);
+
+        return $course['kind'] ?? null;
+    }
+
+    /**
+     * A material (`kind: material`) as template data: `body` (HTML), the
+     * `downloads` in the order entered and as `download_groups`, and its
+     * further `pages`. Null for a course of kind `course` or none at all.
+     *
+     * Download links are signed for `course:<slug>` and only when the learner
+     * may open the material; for anybody else the lists are empty.
+     * statamic-private-media checks access again when the file is fetched.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function material(mixed $user, string $courseSlug): ?array
+    {
+        $course = $this->courses->findCourse($courseSlug);
+
+        if ($course === null || ! $course['is_material']) {
+            return null;
+        }
+
+        $signFor = $user !== null && $this->canAccess($user, $courseSlug) ? $user : null;
+
+        return app(MaterialContent::class)->for($course, $signFor, $user ?? '');
     }
 
     /**
@@ -434,7 +486,8 @@ class CourseProgress
     {
         $context = $this->context($user, $courseSlug);
 
-        if ($context === null) {
+        // A material has no progress to roll up: material() is its read.
+        if ($context === null || $context['course']['is_material']) {
             return null;
         }
 
@@ -456,7 +509,7 @@ class CourseProgress
     {
         $course = $this->courses->findCourse($courseSlug);
 
-        if ($course === null) {
+        if ($course === null || $course['is_material']) {
             return [];
         }
 
@@ -504,7 +557,7 @@ class CourseProgress
     {
         $context = $this->context($user, $courseSlug);
 
-        return $context === null ? null : $this->summaryFromContext($context);
+        return $context === null || $context['course']['is_material'] ? null : $this->summaryFromContext($context);
     }
 
     /**
@@ -720,8 +773,9 @@ class CourseProgress
      *
      * `$write` is `complete`/`incomplete` (setLessonCompletion), `acknowledge`,
      * `progress` (updateLessonProgress) or `item` (completeLesson,
-     * updateLessonItem). Codes: `unknown_course`, `unknown_lesson`, `locked`,
-     * `proof_required`, `not_video`, `not_acknowledgeable`.
+     * updateLessonItem). Codes: `unknown_course`, `material` (a material
+     * records no progress), `unknown_lesson`, `locked`, `proof_required`,
+     * `not_video`, `not_acknowledgeable`.
      */
     public function refusalReason(mixed $user, string $courseSlug, string $lessonSlug, string $write): ?string
     {
@@ -734,6 +788,7 @@ class CourseProgress
         $lesson = $context['lessons']->firstWhere('slug', $lessonSlug);
 
         return match (true) {
+            $context['course']['is_material'] => 'material',
             ! is_array($lesson) => 'unknown_lesson',
             $context['locks'][$lessonSlug] ?? false => 'locked',
             in_array($write, ['complete', 'incomplete', 'progress'], true) && $this->needsProof($lesson) => 'proof_required',
@@ -886,7 +941,11 @@ class CourseProgress
             'lessons' => $lessons,
             'enrollment' => $enrollment,
             'progress' => $progress,
-            'locks' => $this->locks->lockMap($lessons, $progress, $course['sequencing_mode'], $course['drip_mode'], $enrollment, null, $course),
+            // A material's pages are never locked: no sequence, no phases, no
+            // prerequisites, no drip, whatever the lesson entries carry.
+            'locks' => $course['is_material']
+                ? $lessons->mapWithKeys(fn (array $lesson): array => [$lesson['slug'] => false])->all()
+                : $this->locks->lockMap($lessons, $progress, $course['sequencing_mode'], $course['drip_mode'], $enrollment, null, $course),
         ];
     }
 
@@ -1019,6 +1078,11 @@ class CourseProgress
             return [null, null];
         }
 
+        // A material's pages are read, never recorded.
+        if ($context['course']['is_material']) {
+            return [$context, null];
+        }
+
         $lesson = $context['lessons']->firstWhere('slug', $lessonSlug);
 
         if (! is_array($lesson) || ($context['locks'][$lessonSlug] ?? false)) {
@@ -1149,11 +1213,13 @@ class CourseProgress
             return null;
         }
 
-        $enrollment = $before['enrollment'] ?? $this->enroll($user, $courseSlug);
-
-        if ($enrollment === null) {
+        // A material has no clock to bill, pause or resume. A hold is access,
+        // not pacing, so suspendAccess()/restoreAccess() still apply to it.
+        if ($before['course']['is_material'] && in_array($source, self::PACING_WRITES, true)) {
             return null;
         }
+
+        $enrollment = $before['enrollment'] ?? $this->enrollmentFor($user, $before['course'], announce: ! $before['course']['is_material']);
 
         $write($enrollment);
 

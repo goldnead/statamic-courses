@@ -38,6 +38,17 @@ class CourseRepository
      */
     public const PAYMENT_FAILURE_MODES = ['keep', 'pause_drip', 'revoke'];
 
+    /**
+     * What a course entry is. `course`: lessons, progress, sequencing, drip.
+     * `material`: a page (and optionally further pages as lessons) with text,
+     * images and downloads, opened like a course, without any of the pacing.
+     * An entry without the field, or with a value this version does not
+     * know, is a course: existing courses need no data change.
+     */
+    public const KINDS = ['course', 'material'];
+
+    public const KIND_MATERIAL = 'material';
+
     public function coursesCollection(): string
     {
         return (string) config('courses.collections.courses', 'courses');
@@ -62,6 +73,20 @@ class CourseRepository
     }
 
     /**
+     * A course by its entry id, or null for an id outside the courses collection.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findCourseById(string $id): ?array
+    {
+        $entry = $id === '' ? null : Entry::find($id);
+
+        return $entry instanceof StatamicEntry && $entry->collectionHandle() === $this->coursesCollection()
+            ? $this->normalizeCourse($entry)
+            : null;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function allCourses(): array
@@ -82,20 +107,32 @@ class CourseRepository
     public function normalizeCourse(StatamicEntry $entry): array
     {
         $product = trim((string) ($entry->get('product') ?? ''));
+        $kind = $this->oneOf($entry->get('kind'), self::KINDS, 'course');
+        $material = $kind === self::KIND_MATERIAL;
 
         return [
             'id' => (string) $entry->id(),
             'slug' => (string) $entry->slug(),
             'title' => (string) $entry->get('title'),
             'summary' => (string) ($entry->get('summary') ?? ''),
+            'kind' => $kind,
+            'is_material' => $material,
+            // The public cover for a card; never a file from private-media.
+            'cover_url' => $entry->get('cover') !== null ? app(LessonBlocks::class)->publicUrl($entry->get('cover')) : null,
             // The entitlements product that opens this course. Falls back to the
             // course slug, so a site that names its products after its courses
             // has nothing to fill in.
             'product' => $product !== '' ? $product : (string) $entry->slug(),
-            'sequencing_mode' => $this->oneOf($entry->get('sequencing_mode'), self::SEQUENCING_MODES, 'none'),
-            'drip_mode' => $this->oneOf($entry->get('drip_mode'), self::DRIP_MODES, 'none'),
+            // A material has no pacing, whatever the entry kept from a time it
+            // was a course: the fields are hidden, not cleared, in the CP.
+            'sequencing_mode' => $material ? 'none' : $this->oneOf($entry->get('sequencing_mode'), self::SEQUENCING_MODES, 'none'),
+            'drip_mode' => $material ? 'none' : $this->oneOf($entry->get('drip_mode'), self::DRIP_MODES, 'none'),
             'drip_day_of_month' => max(1, min(31, (int) ($entry->get('drip_day_of_month') ?? 1))),
-            'on_payment_failure' => $this->oneOf($entry->get('on_payment_failure'), self::PAYMENT_FAILURE_MODES, 'keep'),
+            // Without a drip there is nothing to pause: a failed payment either
+            // keeps the material open until the period ends or closes it.
+            'on_payment_failure' => $material && $entry->get('on_payment_failure') === 'pause_drip'
+                ? 'keep'
+                : $this->oneOf($entry->get('on_payment_failure'), self::PAYMENT_FAILURE_MODES, 'keep'),
             // Further products that open this course: a bundle sold as one
             // product lists itself on every course it contains.
             'bundles' => array_values(array_diff($this->strings($entry->get('bundles')), [$product !== '' ? $product : (string) $entry->slug()])),

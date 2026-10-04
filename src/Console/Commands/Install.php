@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Console\Commands;
 
+use Goldnead\Courses\Support\CourseBrand;
 use Goldnead\Courses\Support\LessonBlocks;
 use Illuminate\Console\Command;
 use Statamic\Facades\AssetContainer;
@@ -29,6 +30,9 @@ class Install extends Command
         {--dry-run : List what would be created or added, save nothing}';
 
     protected $description = 'Create the course and lesson collections with their blueprints.';
+
+    /** What an image field says when it falls back to a public container. */
+    public const PUBLIC_IMAGES_NOTICE = 'Public: without statamic-private-media these images are reachable by anybody with the link.';
 
     public function handle(): int
     {
@@ -87,6 +91,7 @@ class Install extends Command
         $contents = YAML::parse((string) file_get_contents(__DIR__.'/../../../resources/blueprints/'.$handle.'.yaml'));
         $contents = $this->localize($this->pointEntriesFieldsAt($contents, $courses, $lessons));
         $contents = $this->pointAssetsFieldsAt($contents);
+        $contents = $this->pointBrandFieldAt($contents);
 
         if ($existing && $this->option('merge') && ! $this->option('force')) {
             $this->mergeInto($existing, $contents, $handle);
@@ -120,10 +125,12 @@ class Install extends Command
      *
      * A missing field goes into the existing section that holds the field it
      * follows in the shipped blueprint; failing that, into an existing section
-     * of the same name; failing that, a new section with the shipped name at
-     * the end of the first tab. A select the site already has keeps its
-     * options and gains only the missing ones. Nothing is removed, reordered
-     * or reconfigured.
+     * of the same name; failing that, a new section with the shipped name
+     * right behind the section holding the last shipped field the site has
+     * (the end of the first tab when there is none). A select the site
+     * already has keeps its options and gains only the missing ones; a field
+     * the shipped blueprint hides for a material gains that condition.
+     * Nothing is removed, reordered or otherwise reconfigured.
      *
      * @param  array<string, mixed>  $shipped
      */
@@ -133,6 +140,10 @@ class Install extends Command
         $contents['tabs'] ??= [];
         $added = [];
         $options = [];
+        $conditions = [];
+        // The last shipped field the site has (or just got): a new section
+        // goes right behind the section that holds it, not to the end.
+        $lastSeen = null;
 
         foreach ($shipped['tabs'] ?? [] as $shippedTab) {
             foreach ($shippedTab['sections'] ?? [] as $shippedSection) {
@@ -152,15 +163,22 @@ class Install extends Command
                     if ($at !== null || $existing->hasField($fieldHandle)) {
                         if ($at !== null) {
                             $options = [...$options, ...$this->mergeOptions($contents, $at, $field)];
+
+                            if ($this->mergeKindCondition($contents, $at, $field)) {
+                                $conditions[] = $fieldHandle;
+                            }
+
                             $previous = $fieldHandle;
+                            $lastSeen = $fieldHandle;
                         }
 
                         continue;
                     }
 
-                    $contents = $this->insertField($contents, $field, $previous, $shippedSection['display'] ?? null);
+                    $contents = $this->insertField($contents, $field, $previous, $shippedSection['display'] ?? null, $lastSeen);
                     $added[] = $fieldHandle;
                     $previous = $fieldHandle;
+                    $lastSeen = $fieldHandle;
                 }
             }
         }
@@ -173,7 +191,17 @@ class Install extends Command
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", "+ option {$option}");
         }
 
-        if ($added === [] && $options === []) {
+        foreach ($conditions as $fieldHandle) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", "+ material condition {$fieldHandle}");
+        }
+
+        $hidBrand = $handle === 'course' && $this->hideBrandOnSingleBrand($contents);
+
+        if ($hidBrand) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", '+ hidden brand (one brand only)');
+        }
+
+        if ($added === [] && $options === [] && $conditions === [] && ! $hidBrand) {
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'up to date');
 
             return;
@@ -222,7 +250,7 @@ class Install extends Command
      * @param  array<string, mixed>  $field
      * @return array<string, mixed>
      */
-    protected function insertField(array $contents, array $field, ?string $after, mixed $sectionDisplay): array
+    protected function insertField(array $contents, array $field, ?string $after, mixed $sectionDisplay, ?string $anchor = null): array
     {
         $at = $after !== null ? $this->locateField($contents, $after) : null;
 
@@ -243,14 +271,68 @@ class Install extends Command
             }
         }
 
-        $tabKey = array_key_first($contents['tabs']) ?? 'main';
-        $contents['tabs'][$tabKey]['sections'] ??= [];
-        $contents['tabs'][$tabKey]['sections'][] = array_filter([
+        $section = array_filter([
             'display' => $sectionDisplay,
             'fields' => [$field],
         ], fn ($value) => $value !== null);
 
+        // Right behind the section holding the shipped field before it (the
+        // Material section behind the main one), else at the end of the first tab.
+        $behind = $anchor !== null ? $this->locateField($contents, $anchor) : null;
+
+        if ($behind !== null) {
+            [$tabKey, $s] = $behind;
+            array_splice($contents['tabs'][$tabKey]['sections'], $s + 1, 0, [$section]);
+
+            return $contents;
+        }
+
+        $tabKey = array_key_first($contents['tabs']) ?? 'main';
+        $contents['tabs'][$tabKey]['sections'] ??= [];
+        $contents['tabs'][$tabKey]['sections'][] = $section;
+
         return $contents;
+    }
+
+    /**
+     * A field the site already has, which the shipped blueprint hides for a
+     * material, gets that condition too: added to its own `if` when it has
+     * one, as `unless` otherwise. A condition on `kind` it already carries,
+     * or an `unless` it has for something else, is left alone.
+     *
+     * @param  array<string, mixed>  $contents
+     * @param  array{0: int|string, 1: int, 2: int}  $at
+     * @param  array<string, mixed>  $shipped
+     */
+    protected function mergeKindCondition(array &$contents, array $at, array $shipped): bool
+    {
+        $hides = ($shipped['field']['unless']['kind'] ?? null) === 'equals material'
+            || ($shipped['field']['if']['kind'] ?? null) === 'not material';
+
+        if (! $hides) {
+            return false;
+        }
+
+        [$tabKey, $s, $f] = $at;
+        $current = &$contents['tabs'][$tabKey]['sections'][$s]['fields'][$f]['field'];
+
+        if (! is_array($current) || isset($current['if']['kind']) || isset($current['unless']['kind'])) {
+            return false;
+        }
+
+        if (is_array($current['if'] ?? null)) {
+            $current['if']['kind'] = 'not material';
+
+            return true;
+        }
+
+        if (isset($current['unless']) || isset($current['if'])) {
+            return false;
+        }
+
+        $current['unless'] = ['kind' => 'equals material'];
+
+        return true;
     }
 
     /**
@@ -368,24 +450,46 @@ class Install extends Command
             : AssetContainer::all()->reject(fn ($c) => $c->handle() === $private)->first()?->handle();
 
         $walk = function (array $node) use (&$walk, $container, $private): array {
-            if (array_is_list($node) && collect($node)->contains(fn ($item) => is_array($item) && ($item['field']['container'] ?? null) === '@private-media')) {
-                $node = $private === null
-                    ? array_values(array_filter($node, fn ($item) => ! in_array($item['handle'] ?? null, ['private', 'private_file'], true)))
-                    : array_map(function ($item) use ($private) {
-                        if (is_array($item) && ($item['field']['container'] ?? null) === '@private-media') {
-                            $item['field']['container'] = $private;
-                        }
+            if ($private === null && array_is_list($node)) {
+                // A material's download list holds nothing but private files:
+                // without private-media there is no protected way to serve
+                // them, so the list is left out rather than offered public.
+                $node = array_values(array_filter($node, fn ($item) => ! (is_array($item)
+                    && ($item['field']['type'] ?? null) === 'grid'
+                    && str_contains((string) json_encode($item['field']), '"@private-media"'))));
 
-                        return $item;
-                    }, $node);
-
-                if ($private === null) {
-                    // The public field no longer depends on a toggle that is gone.
-                    $node = array_map(function ($item) {
+                // The download block's private toggle and its field go; the
+                // public field no longer depends on a toggle that is gone.
+                if (collect($node)->contains(fn ($item) => is_array($item) && ($item['handle'] ?? null) === 'private_file')) {
+                    $node = array_values(array_map(function ($item) {
                         unset($item['field']['unless']);
 
                         return $item;
-                    }, $node);
+                    }, array_filter($node, fn ($item) => ! in_array($item['handle'] ?? null, ['private', 'private_file'], true))));
+                }
+            }
+
+            // Any other field on private-media's container (a material's text
+            // images, the lesson image block): that container, or, without
+            // it, the public one with a notice that says so.
+            if (($node['container'] ?? null) === '@private-media') {
+                if ($private !== null) {
+                    $node['container'] = $private;
+                } else {
+                    // Replaced, not appended: the shipped text promises a
+                    // protection this site does not have.
+                    unset($node['container']);
+                    $node['instructions'] = $this->translate(self::PUBLIC_IMAGES_NOTICE);
+                }
+            }
+
+            // Bard refuses its image button without a container: with none
+            // at all, the button goes.
+            if (($node['type'] ?? null) === 'bard' && ! isset($node['container']) && in_array('image', $node['buttons'] ?? [], true)) {
+                if ($container !== null) {
+                    $node['container'] = $container;
+                } else {
+                    $node['buttons'] = array_values(array_diff($node['buttons'], ['image']));
                 }
             }
 
@@ -407,6 +511,96 @@ class Install extends Command
         };
 
         return $walk($contents);
+    }
+
+    /**
+     * The `brand` field is a choice of the site's brands by name, written in
+     * at install (a brand added later: `courses:install --merge` adds its
+     * option). On a single-brand site, or without statamic-brand-context,
+     * the field is left out: there is nothing to choose.
+     *
+     * @param  array<string, mixed>  $contents
+     * @return array<string, mixed>
+     */
+    protected function pointBrandFieldAt(array $contents): array
+    {
+        $brands = $this->brandOptions();
+
+        $walk = function (array $node) use (&$walk, $brands): array {
+            if (array_is_list($node) && collect($node)->contains(fn ($item) => is_array($item) && ($item['field']['options'] ?? null) === '@brands')) {
+                $node = $brands === null
+                    ? array_values(array_filter($node, fn ($item) => ($item['field']['options'] ?? null) !== '@brands'))
+                    : array_map(function ($item) use ($brands) {
+                        if (is_array($item) && ($item['field']['options'] ?? null) === '@brands') {
+                            $item['field']['options'] = $brands;
+                        }
+
+                        return $item;
+                    }, $node);
+            }
+
+            foreach ($node as $key => $value) {
+                if (is_array($value)) {
+                    $node[$key] = $walk($value);
+                }
+            }
+
+            return $node;
+        };
+
+        return $walk($contents);
+    }
+
+    /**
+     * handle => name of every brand, or null on a single-brand site.
+     *
+     * @return array<string, string>|null
+     */
+    protected function brandOptions(): ?array
+    {
+        if (! $this->multiBrand()) {
+            return null;
+        }
+
+        $model = CourseBrand::BRAND_MODEL;
+
+        return $model::query()->orderBy('name')->get()
+            ->mapWithKeys(fn ($brand): array => [(string) $brand->handle => (string) ($brand->name ?: $brand->handle)])
+            ->all();
+    }
+
+    protected function multiBrand(): bool
+    {
+        return app()->bound('brand-context')
+            && class_exists(CourseBrand::BRAND_MODEL)
+            && app('brand-context')->multiBrandEnabled();
+    }
+
+    /**
+     * An older blueprint's brand text field, on a site with one brand: hidden,
+     * since a handle typed there has nothing to point at. Only the field this
+     * addon shipped (a text field); anything else a site made of it stays.
+     *
+     * @param  array<string, mixed>  $contents
+     */
+    protected function hideBrandOnSingleBrand(array &$contents): bool
+    {
+        $at = $this->locateField($contents, 'brand');
+
+        if ($at === null || $this->multiBrand()) {
+            return false;
+        }
+
+        [$tabKey, $s, $f] = $at;
+        $field = &$contents['tabs'][$tabKey]['sections'][$s]['fields'][$f]['field'];
+
+        if (! is_array($field) || ($field['type'] ?? null) !== 'text' || ($field['visibility'] ?? null) === 'hidden') {
+            return false;
+        }
+
+        $field['visibility'] = 'hidden';
+
+        return true;
     }
 
     /**

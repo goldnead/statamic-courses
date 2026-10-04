@@ -197,6 +197,29 @@ tabs:
                           field:
                             type: text
                             display: Caption
+                    image:
+                      display: Image
+                      icon: insert-image
+                      fields:
+                        -
+                          handle: image
+                          field:
+                            type: assets
+                            display: Image
+                            max_files: 1
+                            container: '@private-media'
+                            show_set_alt: false
+                            instructions: 'Shown only to somebody who may open the course, through a signed link.'
+                        -
+                          handle: alt
+                          field:
+                            type: text
+                            display: 'Alt text'
+                        -
+                          handle: caption
+                          field:
+                            type: text
+                            display: Caption
                     download:
                       display: Download
                       icon: download
