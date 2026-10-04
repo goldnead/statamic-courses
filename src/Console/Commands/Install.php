@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Console\Commands;
 
+use Goldnead\Courses\Support\CourseBrand;
 use Goldnead\Courses\Support\LessonBlocks;
 use Illuminate\Console\Command;
 use Statamic\Facades\AssetContainer;
@@ -90,6 +91,7 @@ class Install extends Command
         $contents = YAML::parse((string) file_get_contents(__DIR__.'/../../../resources/blueprints/'.$handle.'.yaml'));
         $contents = $this->localize($this->pointEntriesFieldsAt($contents, $courses, $lessons));
         $contents = $this->pointAssetsFieldsAt($contents);
+        $contents = $this->pointBrandFieldAt($contents);
 
         if ($existing && $this->option('merge') && ! $this->option('force')) {
             $this->mergeInto($existing, $contents, $handle);
@@ -193,7 +195,13 @@ class Install extends Command
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", "+ material condition {$fieldHandle}");
         }
 
-        if ($added === [] && $options === [] && $conditions === []) {
+        $hidBrand = $handle === 'course' && $this->hideBrandOnSingleBrand($contents);
+
+        if ($hidBrand) {
+            $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", '+ hidden brand (one brand only)');
+        }
+
+        if ($added === [] && $options === [] && $conditions === [] && ! $hidBrand) {
             $this->components->twoColumnDetail("Blueprint <comment>{$handle}</comment>", 'up to date');
 
             return;
@@ -503,6 +511,96 @@ class Install extends Command
         };
 
         return $walk($contents);
+    }
+
+    /**
+     * The `brand` field is a choice of the site's brands by name, written in
+     * at install (a brand added later: `courses:install --merge` adds its
+     * option). On a single-brand site, or without statamic-brand-context,
+     * the field is left out: there is nothing to choose.
+     *
+     * @param  array<string, mixed>  $contents
+     * @return array<string, mixed>
+     */
+    protected function pointBrandFieldAt(array $contents): array
+    {
+        $brands = $this->brandOptions();
+
+        $walk = function (array $node) use (&$walk, $brands): array {
+            if (array_is_list($node) && collect($node)->contains(fn ($item) => is_array($item) && ($item['field']['options'] ?? null) === '@brands')) {
+                $node = $brands === null
+                    ? array_values(array_filter($node, fn ($item) => ($item['field']['options'] ?? null) !== '@brands'))
+                    : array_map(function ($item) use ($brands) {
+                        if (is_array($item) && ($item['field']['options'] ?? null) === '@brands') {
+                            $item['field']['options'] = $brands;
+                        }
+
+                        return $item;
+                    }, $node);
+            }
+
+            foreach ($node as $key => $value) {
+                if (is_array($value)) {
+                    $node[$key] = $walk($value);
+                }
+            }
+
+            return $node;
+        };
+
+        return $walk($contents);
+    }
+
+    /**
+     * handle => name of every brand, or null on a single-brand site.
+     *
+     * @return array<string, string>|null
+     */
+    protected function brandOptions(): ?array
+    {
+        if (! $this->multiBrand()) {
+            return null;
+        }
+
+        $model = CourseBrand::BRAND_MODEL;
+
+        return $model::query()->orderBy('name')->get()
+            ->mapWithKeys(fn ($brand): array => [(string) $brand->handle => (string) ($brand->name ?: $brand->handle)])
+            ->all();
+    }
+
+    protected function multiBrand(): bool
+    {
+        return app()->bound('brand-context')
+            && class_exists(CourseBrand::BRAND_MODEL)
+            && app('brand-context')->multiBrandEnabled();
+    }
+
+    /**
+     * An older blueprint's brand text field, on a site with one brand: hidden,
+     * since a handle typed there has nothing to point at. Only the field this
+     * addon shipped (a text field); anything else a site made of it stays.
+     *
+     * @param  array<string, mixed>  $contents
+     */
+    protected function hideBrandOnSingleBrand(array &$contents): bool
+    {
+        $at = $this->locateField($contents, 'brand');
+
+        if ($at === null || $this->multiBrand()) {
+            return false;
+        }
+
+        [$tabKey, $s, $f] = $at;
+        $field = &$contents['tabs'][$tabKey]['sections'][$s]['fields'][$f]['field'];
+
+        if (! is_array($field) || ($field['type'] ?? null) !== 'text' || ($field['visibility'] ?? null) === 'hidden') {
+            return false;
+        }
+
+        $field['visibility'] = 'hidden';
+
+        return true;
     }
 
     /**

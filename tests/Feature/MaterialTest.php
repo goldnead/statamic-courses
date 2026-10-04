@@ -1,5 +1,6 @@
 <?php
 
+use Goldnead\BrandContext\Models\Brand;
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonState;
@@ -226,6 +227,84 @@ describe('form', function () {
     });
 });
 
+describe('image set in the text', function () {
+    beforeEach(function () {
+        // What Bard stores for a set: a `set` node, its values under attrs.values.
+        Entry::find($this->material)->set('body', [
+            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Before.']]],
+            ['type' => 'set', 'attrs' => ['id' => 's1', 'values' => [
+                'type' => 'image', 'image' => 'baraye/figure.png', 'alt' => 'The four modes', 'caption' => 'Figure 1',
+            ]]],
+            ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'After.']]],
+        ])->save();
+    });
+
+    it('offers images as a set with a file from the private container, alt text and caption, not as the Bard image button', function () {
+        $body = Blueprint::find('collections.courses.course')->field('body')->config();
+        $set = collect($body['sets'])->flatMap(fn ($group) => $group['sets'] ?? [])->get('image');
+        $fields = collect($set['fields'])->keyBy('handle');
+
+        expect($body['buttons'])->not->toContain('image')
+            ->and($fields->keys()->all())->toBe(['image', 'alt', 'caption'])
+            ->and($fields['image']['field'])->toMatchArray(['type' => 'assets', 'container' => 'private', 'max_files' => 1]);
+    });
+
+    it('renders the image set as a signed figure, in its place in the text, for somebody with access', function () {
+        PrivateMedia::$signs = true;
+
+        $html = Courses::material($this->buyer, 'baraye')['body'];
+
+        expect($html)->toContain('src="/!/private-media/course:baraye/baraye/figure.png?signature=test"')
+            ->toContain('alt="The four modes"')
+            ->toContain('Figure 1')
+            ->and(strpos($html, 'Before.'))->toBeLessThan(strpos($html, 'figure.png'))
+            ->and(strpos($html, 'figure.png'))->toBeLessThan(strpos($html, 'After.'));
+    });
+
+    it('leaves the whole image set out, caption included, for a stranger and a guest', function () {
+        PrivateMedia::$signs = true;
+
+        foreach ([$this->stranger, null] as $viewer) {
+            expect(Courses::material($viewer, 'baraye')['body'])
+                ->toContain('Before.')->toContain('After.')
+                ->not->toContain('<img')->not->toContain('figure.png')->not->toContain('Figure 1');
+        }
+    });
+});
+
+describe('brand field', function () {
+    it('leaves the brand field out on a single-brand site', function () {
+        expect(Blueprint::find('collections.courses.course')->hasField('brand'))->toBeFalse();
+    });
+
+    it('offers the brands by name on a multi-brand site', function () {
+        config()->set('brand-context.multi_brand', true);
+        app('brand-context')->forget();
+        Brand::create(['handle' => 'akademie', 'name' => 'Akademie']);
+        Brand::create(['handle' => 'studio', 'name' => 'Studio']);
+
+        $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+        $brand = Blueprint::find('collections.courses.course')->field('brand')->config();
+
+        expect($brand['type'])->toBe('select')
+            ->and($brand['options'])->toMatchArray(['akademie' => 'Akademie', 'studio' => 'Studio'])
+            ->and($brand['instructions'] ?? '')->not->toContain('handle');
+    });
+
+    it('hides the brand text field an older blueprint has, on a single-brand site, on --merge', function () {
+        Blueprint::make('course')->setNamespace('collections.courses')->setContents([
+            'tabs' => [
+                'main' => ['sections' => [['fields' => [['handle' => 'title', 'field' => ['type' => 'text']]]]]],
+                'sidebar' => ['sections' => [['fields' => [['handle' => 'brand', 'field' => ['type' => 'text', 'display' => 'Brand']]]]]],
+            ],
+        ])->save();
+
+        $this->artisan('courses:install', ['--merge' => true])->expectsOutputToContain('hidden brand')->assertSuccessful();
+
+        expect(Blueprint::find('collections.courses.course')->field('brand')->config()['visibility'])->toBe('hidden');
+    });
+});
+
 describe('no progress', function () {
     beforeEach(function () {
         $this->makeLesson($this->material, 'notes', ['sort_order' => 1, 'item_type' => 'text']);
@@ -400,7 +479,8 @@ describe('images in the text', function () {
     });
 
     it('picks text images from the private container, and from the public one with a notice without private-media', function () {
-        $body = fn () => Blueprint::find('collections.courses.course')->field('body')->config();
+        $body = fn () => collect(collect(Blueprint::find('collections.courses.course')->field('body')->config()['sets'])
+            ->flatMap(fn ($group) => $group['sets'] ?? [])->get('image')['fields'])->keyBy('handle')['image']['field'];
 
         expect($body()['container'])->toBe('private');
 

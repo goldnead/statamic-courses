@@ -147,10 +147,60 @@ class MaterialContent
             return is_string($raw) ? $raw : '';
         }
 
-        $nodes = $this->protectImages($raw, $signFor, LessonBlocks::resourceFor($slug));
-        $html = (new Augmentor($entry->blueprint()?->field('body')?->fieldtype() ?? new Bard))->augment($nodes);
+        $resource = LessonBlocks::resourceFor($slug);
+        $nodes = $this->protectImages($raw, $signFor, $resource);
+
+        // Text runs go through a plain Bard; an image set in between becomes
+        // the same figure the lesson image block renders, in its place.
+        $html = '';
+        $run = [];
+
+        foreach ($nodes as $node) {
+            if (is_array($node) && ($node['type'] ?? null) === 'set') {
+                $html .= $this->text($run).$this->set($node['attrs']['values'] ?? null, $signFor, $resource);
+                $run = [];
+
+                continue;
+            }
+
+            $run[] = $node;
+        }
+
+        return $html.$this->text($run);
+    }
+
+    /**
+     * @param  list<mixed>  $nodes
+     */
+    protected function text(array $nodes): string
+    {
+        if ($nodes === []) {
+            return '';
+        }
+
+        $html = (new Augmentor(new Bard))->augment($nodes);
 
         return is_string($html) ? $html : '';
+    }
+
+    /**
+     * A Bard set of the text. `image`: a figure, signed like a download, or
+     * nothing at all (caption included) when it cannot be. Any other set a
+     * site adds renders from `courses::blocks.{type}` if it has one.
+     */
+    protected function set(mixed $values, mixed $signFor, string $resource): string
+    {
+        if (! is_array($values) || ! is_string($values['type'] ?? null)) {
+            return '';
+        }
+
+        $block = $values['type'] === 'image'
+            ? $this->blocks->image($values, $signFor, $resource)
+            : $values;
+
+        $view = 'courses::blocks.'.$values['type'];
+
+        return $block !== null && view()->exists($view) ? view($view, $block)->render() : '';
     }
 
     /**

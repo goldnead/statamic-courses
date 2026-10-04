@@ -283,7 +283,7 @@ class LessonBlocks
      * @param  array<string, mixed>  $block
      * @return array<string, mixed>|null
      */
-    protected function image(array $block, mixed $user, ?string $resource): ?array
+    public function image(array $block, mixed $user, ?string $resource): ?array
     {
         $asset = $this->asset($this->inPrivateContainer($block['image'] ?? null, onlyIfThere: true));
 
@@ -298,10 +298,13 @@ class LessonBlocks
             return null;
         }
 
+        $alt = trim((string) ($block['alt'] ?? ''));
+
         return [
             'type' => 'image',
             'url' => $url,
-            'alt' => trim((string) ($block['alt'] ?? '')),
+            // The block's own alt text, else the one stored on the asset.
+            'alt' => $alt !== '' || ! $asset instanceof \Statamic\Assets\Asset ? $alt : trim((string) ($asset->get('alt') ?? '')),
             'caption' => trim((string) ($block['caption'] ?? '')),
             'private' => $private,
         ];

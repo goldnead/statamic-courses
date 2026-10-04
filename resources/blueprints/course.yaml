@@ -45,8 +45,7 @@ tabs:
             field:
               type: bard
               display: Text
-              instructions: 'Text and images of the material. Images are shown only to somebody who may open the material.'
-              container: '@private-media'
+              instructions: 'Text and images of the material. Add an image with + as a set: it is shown only to somebody who may open the material.'
               buttons:
                 - h2
                 - h3
@@ -56,8 +55,34 @@ tabs:
                 - orderedlist
                 - quote
                 - anchor
-                - image
                 - table
+              sets:
+                media:
+                  display: Media
+                  sets:
+                    image:
+                      display: Image
+                      icon: insert-image
+                      fields:
+                        -
+                          handle: image
+                          field:
+                            type: assets
+                            display: Image
+                            max_files: 1
+                            container: '@private-media'
+                            show_set_alt: false
+                            instructions: 'Shown only to somebody who may open the material, through a signed link.'
+                        -
+                          handle: alt
+                          field:
+                            type: text
+                            display: 'Alt text'
+                        -
+                          handle: caption
+                          field:
+                            type: text
+                            display: Caption
               if:
                 kind: 'equals material'
           -
@@ -92,13 +117,13 @@ tabs:
                           display: File
                           max_files: 1
                           container: '@private-media'
-                          width: 66
+                          width: 75
                       -
                         handle: label
                         field:
                           type: text
                           display: Label
-                          width: 33
+                          width: 25
       -
         display: 'Access and pacing'
         fields:
@@ -244,6 +269,8 @@ tabs:
           -
             handle: brand
             field:
-              type: text
+              type: select
               display: Brand
-              instructions: 'Multi-brand sites only: the handle of the brand this course belongs to. Empty: the brand of its site.'
+              instructions: 'The brand this belongs to. Empty: the brand of its site.'
+              clearable: true
+              options: '@brands'

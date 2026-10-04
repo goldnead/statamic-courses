@@ -208,6 +208,7 @@ tabs:
                             display: Image
                             max_files: 1
                             container: '@private-media'
+                            show_set_alt: false
                             instructions: 'Shown only to somebody who may open the course, through a signed link.'
                         -
                           handle: alt
