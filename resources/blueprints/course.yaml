@@ -67,21 +67,25 @@ tabs:
                     display: File
                     max_files: 1
                     container: '@private-media'
+                    width: 33
                 -
                   handle: label
                   field:
                     type: text
                     display: Label
+                    width: 33
                 -
                   handle: group
                   field:
                     type: text
                     display: Group
+                    width: 17
                 -
                   handle: format
                   field:
                     type: text
                     display: Format
+                    width: 17
       -
         display: 'Access and pacing'
         fields:
