@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (proposed 0.4.0)
+## 0.4.0 (2026-10-04)
 
 ### Upgrading
 - No migration, no new permission. Run `php artisan courses:install --merge` to add the fields
