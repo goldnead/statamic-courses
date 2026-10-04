@@ -13,10 +13,75 @@ tabs:
               validate:
                 - required
           -
+            handle: kind
+            field:
+              type: button_group
+              display: Kind
+              default: course
+              instructions: 'A course has lessons, progress and drip. Material is a page with text, images and downloads, opened the same way, without progress.'
+              options:
+                course: Course
+                material: Material
+          -
             handle: summary
             field:
               type: textarea
               display: Summary
+      -
+        display: Material
+        fields:
+          -
+            handle: body
+            field:
+              type: bard
+              display: Text
+              instructions: 'Text and images of the material.'
+              buttons:
+                - h2
+                - h3
+                - bold
+                - italic
+                - unorderedlist
+                - orderedlist
+                - quote
+                - anchor
+                - image
+                - table
+              if:
+                kind: 'equals material'
+          -
+            handle: downloads
+            field:
+              type: grid
+              display: Downloads
+              mode: table
+              add_row: 'Add download'
+              instructions: 'Only somebody who may open the material can download these, through a signed link. Rows with the same group are listed together, in this order.'
+              if:
+                kind: 'equals material'
+              fields:
+                -
+                  handle: file
+                  field:
+                    type: assets
+                    display: File
+                    max_files: 1
+                    container: '@private-media'
+                -
+                  handle: label
+                  field:
+                    type: text
+                    display: Label
+                -
+                  handle: group
+                  field:
+                    type: text
+                    display: Group
+                -
+                  handle: format
+                  field:
+                    type: text
+                    display: Format
       -
         display: 'Access and pacing'
         fields:
@@ -38,6 +103,8 @@ tabs:
               type: select
               display: Sequencing
               default: none
+              unless:
+                kind: 'equals material'
               options:
                 none: 'No locks'
                 section: 'Section by section'
@@ -49,6 +116,8 @@ tabs:
               display: Drip
               default: none
               instructions: 'When a lesson opens. Each lesson says when under Drip.'
+              unless:
+                kind: 'equals material'
               options:
                 none: 'All at once'
                 schedule: 'By week, from enrollment'
@@ -68,6 +137,7 @@ tabs:
               instructions: 'Lessons open on this day, the nth month after enrollment. A day the month does not have falls on its last day.'
               if:
                 drip_mode: 'equals day_of_month'
+                kind: 'not material'
           -
             handle: on_payment_failure
             field:

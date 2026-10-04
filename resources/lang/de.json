@@ -112,5 +112,14 @@
     "Which field counts depends on the drip set on the course. Week: the week after enrollment. Opens after: days after enrollment, the nth day of the month or the nth payment. Opens on: a date. Empty: the lesson opens at once.": "Welches Feld zählt, bestimmt die Freischaltung am Kurs. Woche: die Woche nach der Einschreibung. Öffnet nach: Tage nach der Einschreibung, der n-te Monatstag oder die n-te Zahlung. Öffnet am: ein Datum. Leer: die Lektion öffnet sofort.",
     "Opens after": "Öffnet nach",
     "Opens on": "Öffnet am",
+    "Kind": "Art",
+    "Material": "Material",
+    "A course has lessons, progress and drip. Material is a page with text, images and downloads, opened the same way, without progress.": "Ein Kurs hat Lektionen, Fortschritt und Freischaltung. Material ist eine Seite mit Text, Bildern und Downloads, freigeschaltet wie ein Kurs, ohne Fortschritt.",
+    "Text and images of the material.": "Text und Bilder des Materials.",
+    "Downloads": "Downloads",
+    "Add download": "Download hinzufügen",
+    "Only somebody who may open the material can download these, through a signed link. Rows with the same group are listed together, in this order.": "Herunterladen kann nur, wer das Material öffnen darf, über einen signierten Link. Zeilen mit derselben Gruppe stehen zusammen, in dieser Reihenfolge.",
+    "Group": "Gruppe",
+    "Format": "Format",
     "Empty: everybody in the course. Otherwise only learners who match one of these (product handles, group, tag, segment handle); for everybody else the lesson is not part of the course.": "Leer: alle im Kurs. Sonst nur Lernende, auf die eines davon zutrifft (Produkt-Handles, Gruppe, Tag, Segment-Handle); für alle anderen gehört die Lektion nicht zum Kurs."
 }

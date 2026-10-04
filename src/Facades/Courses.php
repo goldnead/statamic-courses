@@ -31,6 +31,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static array{seats: int, used: int, left: int, members: list<array{email: string, added_at: string|null}>}|null team(mixed $owner, string $courseSlug)
  * @method static list<array<string, mixed>> courses()
  * @method static list<array<string, mixed>>|null lessons(mixed $user, string $courseSlug)
+ * @method static array<string, mixed>|null material(mixed $user, string $courseSlug)
+ * @method static string|null refusalReason(mixed $user, string $courseSlug, string $lessonSlug, string $write)
  *
  * @see CourseProgress
  */

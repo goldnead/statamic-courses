@@ -35,7 +35,10 @@ class ProgressReport
         $now ??= Carbon::now();
         $stuckBefore = $now->copy()->subDays($this->stuckAfterDays());
 
+        // A material records no progress, so it has no row here: it would
+        // read as a course nobody ever started.
         return collect($this->progress->courses())
+            ->reject(fn (array $course): bool => $course['is_material'])
             ->map(fn (array $course): array => $this->row($course, $stuckBefore))
             ->values()
             ->all();

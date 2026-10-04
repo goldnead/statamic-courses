@@ -368,6 +368,25 @@ class Install extends Command
             : AssetContainer::all()->reject(fn ($c) => $c->handle() === $private)->first()?->handle();
 
         $walk = function (array $node) use (&$walk, $container, $private): array {
+            // A material's download list holds nothing but private files:
+            // without private-media there is no protected way to serve them,
+            // so the list is left out rather than offered on a public container.
+            if ($private === null && array_is_list($node)) {
+                $node = array_values(array_filter($node, fn ($item) => ! (is_array($item)
+                    && ($item['field']['type'] ?? null) === 'grid'
+                    && collect($item['field']['fields'] ?? [])->contains(fn ($sub) => ($sub['field']['container'] ?? null) === '@private-media'))));
+            }
+
+            // Images in a material's text come from the public container; with
+            // none, the image button goes, as Bard refuses it without one.
+            if (($node['type'] ?? null) === 'bard' && ! isset($node['container']) && in_array('image', $node['buttons'] ?? [], true)) {
+                if ($container !== null) {
+                    $node['container'] = $container;
+                } else {
+                    $node['buttons'] = array_values(array_diff($node['buttons'], ['image']));
+                }
+            }
+
             if (array_is_list($node) && collect($node)->contains(fn ($item) => is_array($item) && ($item['field']['container'] ?? null) === '@private-media')) {
                 $node = $private === null
                     ? array_values(array_filter($node, fn ($item) => ! in_array($item['handle'] ?? null, ['private', 'private_file'], true)))

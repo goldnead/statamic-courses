@@ -223,6 +223,32 @@ class LessonBlocks
     }
 
     /**
+     * One file from statamic-private-media's container, signed for
+     * `$resource`, in the shape of a download block. Null when it cannot be
+     * served protected: no file, a file outside the private container, no
+     * private-media, no user. A material's download list is made of these.
+     *
+     * A bare path is looked up in the private container first, so a file of
+     * the same name in a public container never stands in for it.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function privateDownload(mixed $file, string $label, mixed $user, string $resource): ?array
+    {
+        if (is_array($file)) {
+            $file = reset($file);
+        }
+
+        $private = config('private-media.source.container');
+
+        if (is_string($file) && $file !== '' && ! str_contains($file, '::') && is_string($private) && $private !== '') {
+            $file = $private.'::'.$file;
+        }
+
+        return $this->download(['private' => true, 'private_file' => $file, 'label' => $label], $user, $resource);
+    }
+
+    /**
      * @param  array<string, mixed>  $block
      * @return array<string, mixed>|null
      */

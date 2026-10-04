@@ -16,6 +16,8 @@ use Statamic\Tags\Tags;
  *
  *   {{ courses }}                                   every course, with has_access and progress
  *   {{ courses only="accessible" }}                 only the ones the learner may open
+ *   {{ courses kind="material" }}                   only materials (or kind="course")
+ *   {{ courses:material course="baraye" }}…{{ /courses:material }}  text, downloads by group, pages
  *   {{ courses:progress course="cvt-101" }}         status, percent, completed/total, continue_lesson
  *   {{ courses:lessons course="cvt-101" }}          lessons with is_locked, is_completed, lock_reason, status
  *   {{ courses:continue course="cvt-101" }}         the next open, unfinished lesson
@@ -54,16 +56,19 @@ class Courses extends Tags
     {
         $user = User::current();
         $onlyAccessible = $this->params->get('only') === 'accessible';
+        $kind = $this->params->get('kind');
         $progress = $this->manager();
 
         $courses = collect($progress->courses())
+            ->filter(fn (array $course): bool => ! in_array($kind, CourseRepository::KINDS, true) || $course['kind'] === $kind)
             ->map(function (array $course) use ($user, $progress): array {
                 $hasAccess = $user !== null && $progress->canAccess($user, $course['slug']);
 
                 return [
                     ...$course,
                     'has_access' => $hasAccess,
-                    'progress' => $hasAccess ? $progress->summary($user, $course['slug']) : null,
+                    // A material has no progress; its content is courses:material.
+                    'progress' => $hasAccess && ! $course['is_material'] ? $progress->summary($user, $course['slug']) : null,
                 ];
             })
             ->filter(fn (array $course): bool => ! $onlyAccessible || $course['has_access'])
@@ -200,6 +205,52 @@ class Courses extends Tags
         }
 
         return '<div class="courses-blocks">'.$html.'</div>';
+    }
+
+    /**
+     * A material (a course of kind `material`) for the signed-in learner: the
+     * one in `course="…"` (slug), or the course entry in context.
+     *
+     *   {{ courses:material course="baraye" }}
+     *     <h1>{{ title }}</h1> {{ body }}
+     *     {{ download_groups }}
+     *       <h2>{{ group }}</h2>
+     *       {{ downloads }}<a href="{{ url }}">{{ label }}</a> {{ format }}, {{ size }}{{ /downloads }}
+     *     {{ /download_groups }}
+     *     {{ pages }}<a href="{{ url }}">{{ title }}</a>{{ /pages }}
+     *   {{ /courses:material }}
+     *
+     * Variables: everything `{{ courses }}` has per course (`kind`, `title`,
+     * `summary`, `url`, …), plus `body` (HTML), `downloads` (`url`, `label`,
+     * `group`, `format`, `filename`, `extension`, `size`), `download_groups`
+     * (`group`, `downloads`, `count`), `has_downloads`, `pages` (`title`,
+     * `url`, `slug`) and `has_pages`.
+     *
+     * Renders nothing for a guest, a learner without access, and a course of
+     * kind `course`. Super users see the text and pages (for the Control
+     * Panel's live preview), and downloads only if they hold access too.
+     *
+     * @return array<string, mixed>|string
+     */
+    public function material(): array|string
+    {
+        $user = User::current();
+        $slug = (string) $this->params->get('course', '');
+
+        if ($slug === '') {
+            $id = $this->context->value('id');
+            $entry = is_string($id) && $id !== '' ? Entry::find($id) : null;
+            $slug = $entry instanceof \Statamic\Entries\Entry
+                && $entry->collectionHandle() === (string) config('courses.collections.courses', 'courses')
+                ? (string) $entry->slug()
+                : '';
+        }
+
+        if ($user === null || $slug === '' || (! $user->isSuper() && ! $this->manager()->canAccess($user, $slug))) {
+            return '';
+        }
+
+        return $this->manager()->material($user, $slug) ?? '';
     }
 
     /**
