@@ -1,0 +1,4 @@
+<figure class="courses-block courses-block--image">
+    <img class="courses-image" src="{{ url | sanitize }}" alt="{{ alt | sanitize }}" loading="lazy">
+    {{ if caption }}<figcaption class="courses-image__caption">{{ caption | sanitize }}</figcaption>{{ /if }}
+</figure>

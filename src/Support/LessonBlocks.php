@@ -27,6 +27,8 @@ use Throwable;
  * - `faq`: `items` (list of `question`, `answer_html`)
  * - `video`: `url`, `embed_url` (YouTube/Vimeo player URL or null), `caption`
  * - `download`: `url`, `label`, `filename`, `extension`, `size`, `private`
+ * - `image`: `url`, `alt`, `caption`, `private` (a file on private-media's
+ *   container is signed for the course, like a private download)
  * - `button`: `label`, `url`, `style` (primary, secondary)
  *
  * A block that has nothing to show (a download without a file, a private
@@ -95,6 +97,7 @@ class LessonBlocks
             'faq' => $this->faq($block),
             'video' => $this->video($block),
             'download' => $this->download($block, $user, $resource),
+            'image' => $this->image($block, $user, $resource),
             'button' => $this->button($block),
             // A set a site added itself: handed over as stored, for its own partial.
             default => $type !== '' ? [...$block, 'type' => $type] : null,
@@ -235,17 +238,98 @@ class LessonBlocks
      */
     public function privateDownload(mixed $file, string $label, mixed $user, string $resource): ?array
     {
-        if (is_array($file)) {
-            $file = reset($file);
+        return $this->download(['private' => true, 'private_file' => $this->inPrivateContainer($file), 'label' => $label], $user, $resource);
+    }
+
+    /**
+     * A signed link to `container::path` when that file sits on
+     * private-media's container, else null: what a material's text puts in
+     * place of a private image. Null for a guest and without private-media.
+     */
+    public function signedAssetUrl(string $assetId, mixed $user, string $resource): ?string
+    {
+        $asset = $this->asset($assetId);
+
+        if (! $asset instanceof \Statamic\Assets\Asset || $asset->containerHandle() !== config('private-media.source.container')) {
+            return null;
+        }
+
+        return $this->signedUrl($asset, $user, $resource);
+    }
+
+    /**
+     * The public URL of an asset field's value, or null. Never a file on
+     * private-media's container: that one has no public URL to give.
+     */
+    public function publicUrl(mixed $value): ?string
+    {
+        $asset = $this->asset($value);
+
+        if (! $asset instanceof AssetContract
+            || ($asset instanceof \Statamic\Assets\Asset && $asset->containerHandle() === config('private-media.source.container'))) {
+            return null;
+        }
+
+        $url = $asset->url();
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
+    /**
+     * An image block (K1 lessons, material pages). A file on private-media's
+     * container is signed for the course and left out when it cannot be;
+     * a file elsewhere is shown by its public URL.
+     *
+     * @param  array<string, mixed>  $block
+     * @return array<string, mixed>|null
+     */
+    protected function image(array $block, mixed $user, ?string $resource): ?array
+    {
+        $asset = $this->asset($this->inPrivateContainer($block['image'] ?? null, onlyIfThere: true));
+
+        if (! $asset instanceof AssetContract) {
+            return null;
+        }
+
+        $private = $asset instanceof \Statamic\Assets\Asset && $asset->containerHandle() === config('private-media.source.container');
+        $url = $private ? $this->signedUrl($asset, $user, $resource) : $asset->url();
+
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        return [
+            'type' => 'image',
+            'url' => $url,
+            'alt' => trim((string) ($block['alt'] ?? '')),
+            'caption' => trim((string) ($block['caption'] ?? '')),
+            'private' => $private,
+        ];
+    }
+
+    /**
+     * A bare path as `<private container>::path`, so a file of the same name
+     * in a public container never stands in for the private one. With
+     * `$onlyIfThere`, only when the private container has that file (an
+     * image field falls back to a public container without private-media).
+     */
+    protected function inPrivateContainer(mixed $value, bool $onlyIfThere = false): mixed
+    {
+        if (is_array($value)) {
+            $value = reset($value);
         }
 
         $private = config('private-media.source.container');
 
-        if (is_string($file) && $file !== '' && ! str_contains($file, '::') && is_string($private) && $private !== '') {
-            $file = $private.'::'.$file;
+        if (! is_string($value) || $value === '' || str_contains($value, '::') || ! is_string($private) || $private === '') {
+            return $value;
         }
 
-        return $this->download(['private' => true, 'private_file' => $file, 'label' => $label], $user, $resource);
+        if ($onlyIfThere && ! AssetContainer::find($private)?->asset($value)) {
+            return $value;
+        }
+
+        return $private.'::'.$value;
     }
 
     /**

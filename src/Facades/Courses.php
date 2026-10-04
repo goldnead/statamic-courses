@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static list<array<string, mixed>> courses()
  * @method static list<array<string, mixed>>|null lessons(mixed $user, string $courseSlug)
  * @method static array<string, mixed>|null material(mixed $user, string $courseSlug)
+ * @method static string|null kind(string $courseSlugOrId)
  * @method static string|null refusalReason(mixed $user, string $courseSlug, string $lessonSlug, string $write)
  *
  * @see CourseProgress

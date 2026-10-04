@@ -73,6 +73,20 @@ class CourseRepository
     }
 
     /**
+     * A course by its entry id, or null for an id outside the courses collection.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findCourseById(string $id): ?array
+    {
+        $entry = $id === '' ? null : Entry::find($id);
+
+        return $entry instanceof StatamicEntry && $entry->collectionHandle() === $this->coursesCollection()
+            ? $this->normalizeCourse($entry)
+            : null;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function allCourses(): array
@@ -103,6 +117,8 @@ class CourseRepository
             'summary' => (string) ($entry->get('summary') ?? ''),
             'kind' => $kind,
             'is_material' => $material,
+            // The public cover for a card; never a file from private-media.
+            'cover_url' => $entry->get('cover') !== null ? app(LessonBlocks::class)->publicUrl($entry->get('cover')) : null,
             // The entitlements product that opens this course. Falls back to the
             // course slug, so a site that names its products after its courses
             // has nothing to fill in.

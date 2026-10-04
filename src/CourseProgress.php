@@ -181,6 +181,18 @@ class CourseProgress
     }
 
     /**
+     * What a course entry is, `course` or `material`, by slug or by entry id;
+     * null when there is no such course. For a picker in another addon that
+     * labels materials ("Baraye (Material)") without reading the entry itself.
+     */
+    public function kind(string $courseSlugOrId): ?string
+    {
+        $course = $this->courses->findCourse($courseSlugOrId) ?? $this->courses->findCourseById($courseSlugOrId);
+
+        return $course['kind'] ?? null;
+    }
+
+    /**
      * A material (`kind: material`) as template data: `body` (HTML), the
      * `downloads` in the order entered and as `download_groups`, and its
      * further `pages`. Null for a course of kind `course` or none at all.

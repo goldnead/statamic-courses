@@ -18,6 +18,7 @@ tabs:
               type: button_group
               display: Kind
               default: course
+              listable: true
               instructions: 'A course has lessons, progress and drip. Material is a page with text, images and downloads, opened the same way, without progress.'
               options:
                 course: Course
@@ -31,11 +32,21 @@ tabs:
         display: Material
         fields:
           -
+            handle: cover
+            field:
+              type: assets
+              display: 'Cover image'
+              instructions: 'For the card in the member area. Public: anybody with the link can see it.'
+              max_files: 1
+              if:
+                kind: 'equals material'
+          -
             handle: body
             field:
               type: bard
               display: Text
-              instructions: 'Text and images of the material.'
+              instructions: 'Text and images of the material. Images are shown only to somebody who may open the material.'
+              container: '@private-media'
               buttons:
                 - h2
                 - h3
@@ -54,38 +65,40 @@ tabs:
             field:
               type: grid
               display: Downloads
-              mode: table
-              add_row: 'Add download'
-              instructions: 'Only somebody who may open the material can download these, through a signed link. Rows with the same group are listed together, in this order.'
+              mode: stacked
+              add_row: 'Add group'
+              instructions: 'Only somebody who may open the material can download these, through a signed link. One group per voicing or part, its files underneath; the format comes from the file.'
               if:
                 kind: 'equals material'
               fields:
-                -
-                  handle: file
-                  field:
-                    type: assets
-                    display: File
-                    max_files: 1
-                    container: '@private-media'
-                    width: 33
-                -
-                  handle: label
-                  field:
-                    type: text
-                    display: Label
-                    width: 33
                 -
                   handle: group
                   field:
                     type: text
                     display: Group
-                    width: 17
+                    instructions: 'For example a voicing. Empty: the files are listed without a heading.'
                 -
-                  handle: format
+                  handle: files
                   field:
-                    type: text
-                    display: Format
-                    width: 17
+                    type: grid
+                    display: Files
+                    mode: table
+                    add_row: 'Add file'
+                    fields:
+                      -
+                        handle: file
+                        field:
+                          type: assets
+                          display: File
+                          max_files: 1
+                          container: '@private-media'
+                          width: 66
+                      -
+                        handle: label
+                        field:
+                          type: text
+                          display: Label
+                          width: 33
       -
         display: 'Access and pacing'
         fields:
@@ -95,12 +108,16 @@ tabs:
               type: text
               display: Product
               instructions: 'The entitlements product that opens this course. Empty means the course slug.'
+              unless:
+                kind: 'equals material'
           -
             handle: bundles
             field:
               type: taggable
               display: Bundles
               instructions: 'Further products that open this course, for a bundle sold as one product.'
+              unless:
+                kind: 'equals material'
           -
             handle: sequencing_mode
             field:
@@ -149,6 +166,8 @@ tabs:
               display: 'When a payment fails'
               default: keep
               instructions: 'For courses paid by subscription. Lifted as soon as the payment goes through.'
+              unless:
+                kind: 'equals material'
               options:
                 keep: 'Keep access until the paid period ends'
                 pause_drip: 'Pause the drip'
@@ -164,6 +183,8 @@ tabs:
               default: 0
               min: 0
               instructions: 'How many people a buyer can add to the course by email. 0: no team.'
+              unless:
+                kind: 'equals material'
       -
         display: 'Visible to'
         instructions: 'Limit a whole section to some learners. Everybody else does not see its lessons.'
@@ -175,6 +196,8 @@ tabs:
               display: Sections
               mode: stacked
               add_row: 'Add section rule'
+              unless:
+                kind: 'equals material'
               fields:
                 -
                   handle: section_key

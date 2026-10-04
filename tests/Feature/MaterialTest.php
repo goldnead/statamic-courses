@@ -3,6 +3,7 @@
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Models\LessonState;
+use Goldnead\Courses\Support\LessonBlocks;
 use Goldnead\Courses\Support\ProgressReport;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
@@ -37,13 +38,14 @@ beforeEach(function () {
     Storage::fake('private');
     AssetContainer::make('private')->disk('private')->save();
 
-    foreach (['satb.pdf', 'satb.mp3', 'ssa.pdf', 'readme.txt'] as $file) {
+    foreach (['satb.pdf', 'satb.mp3', 'ssa.pdf', 'readme.txt', 'figure.png'] as $file) {
         Storage::disk('private')->put('baraye/'.$file, str_repeat('x', 1024));
     }
 
     Storage::fake('assets', ['url' => '/assets']);
     AssetContainer::make('assets')->disk('assets')->save();
     Storage::disk('assets')->put('baraye/public.pdf', 'x');
+    Storage::disk('assets')->put('baraye/cover.jpg', 'x');
 
     // Installed again now that both containers exist, as a site would have them.
     $this->artisan('courses:install', ['--force' => true])->run();
@@ -52,17 +54,27 @@ beforeEach(function () {
         'title' => 'Baraye',
         'kind' => 'material',
         'summary' => 'Arrangement in three voicings',
+        'cover' => 'baraye/cover.jpg',
         // Set on the entry before the kind changed; a material ignores them.
         'sequencing_mode' => 'lesson',
         'drip_mode' => 'days',
         'body' => [
             ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Sing it slowly.']]],
+            // The paid figure, from private-media's container.
+            ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::private::baraye/figure.png', 'alt' => 'Figure']]]],
         ],
+        // One row per group, its files underneath.
         'downloads' => [
-            ['id' => 'd1', 'file' => 'baraye/satb.pdf', 'label' => 'Score', 'group' => 'SATB', 'format' => 'PDF'],
-            ['id' => 'd2', 'file' => 'baraye/ssa.pdf', 'label' => 'Score', 'group' => 'SSA'],
-            ['id' => 'd3', 'file' => 'baraye/satb.mp3', 'label' => 'Rehearsal track', 'group' => 'SATB', 'format' => 'MP3'],
-            ['id' => 'd4', 'file' => 'baraye/readme.txt', 'label' => 'Notes'],
+            ['id' => 'g1', 'group' => 'SATB', 'files' => [
+                ['id' => 'd1', 'file' => 'baraye/satb.pdf', 'label' => 'Score'],
+                ['id' => 'd3', 'file' => 'baraye/satb.mp3', 'label' => 'Rehearsal track'],
+            ]],
+            ['id' => 'g2', 'group' => 'SSA', 'files' => [
+                ['id' => 'd2', 'file' => 'baraye/ssa.pdf', 'label' => 'Score'],
+            ]],
+            ['id' => 'g3', 'files' => [
+                ['id' => 'd4', 'file' => 'baraye/readme.txt', 'label' => 'Notes'],
+            ]],
         ],
     ]);
 
@@ -118,16 +130,99 @@ describe('kind', function () {
     });
 
     it('picks downloads from the private-media container only, and offers none without it', function () {
-        $file = fn () => collect(Blueprint::find('collections.courses.course')->field('downloads')?->config()['fields'] ?? [])
-            ->keyBy('handle')->get('file');
+        $groupFields = collect(Blueprint::find('collections.courses.course')->field('downloads')->config()['fields'])->keyBy('handle');
+        $fileFields = collect($groupFields['files']['field']['fields'])->keyBy('handle');
 
-        expect($file()['field'])->toMatchArray(['type' => 'assets', 'container' => 'private', 'max_files' => 1]);
+        expect($groupFields->keys()->all())->toBe(['group', 'files'])
+            ->and($fileFields->keys()->all())->toBe(['file', 'label'])
+            ->and($fileFields['file']['field'])->toMatchArray(['type' => 'assets', 'container' => 'private', 'max_files' => 1]);
 
         config()->set('private-media.source.container', null);
         $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
 
         expect(Blueprint::find('collections.courses.course')->hasField('downloads'))->toBeFalse()
             ->and(Blueprint::find('collections.courses.course')->hasField('body'))->toBeTrue();
+    });
+});
+
+/**
+ * Whether a field's conditions hide it once the kind is `material`.
+ *
+ * @param  array<string, mixed>  $field
+ */
+function hiddenForMaterial(array $field): bool
+{
+    return ($field['unless']['kind'] ?? null) === 'equals material'
+        || ($field['if']['kind'] ?? null) === 'not material';
+}
+
+const COURSE_ONLY_FIELDS = ['product', 'bundles', 'sequencing_mode', 'drip_mode', 'drip_day_of_month', 'on_payment_failure', 'team_seats', 'section_audiences'];
+
+describe('form', function () {
+    it('hides everything that needs lessons, pacing, a subscription or seats once the kind is Material', function () {
+        $fields = Blueprint::find('collections.courses.course')->fields()->all();
+
+        foreach (COURSE_ONLY_FIELDS as $handle) {
+            expect(hiddenForMaterial($fields[$handle]->config()))->toBeTrue($handle.' stays visible for a material');
+        }
+
+        expect($fields['drip_day_of_month']->config()['if']['drip_mode'])->toBe('equals day_of_month')
+            ->and(hiddenForMaterial($fields['title']->config()))->toBeFalse()
+            ->and(hiddenForMaterial($fields['summary']->config()))->toBeFalse();
+    });
+
+    it('shows the kind as a column in the entries listing', function () {
+        expect(Blueprint::find('collections.courses.course')->field('kind')->config()['listable'])->toBeTrue();
+    });
+
+    it('teaches an existing blueprint on --merge to hide the course fields for Material, and puts Material right after the main section', function () {
+        Blueprint::make('course')->setNamespace('collections.courses')->setContents([
+            'tabs' => ['main' => ['sections' => [
+                ['fields' => [
+                    ['handle' => 'title', 'field' => ['type' => 'text']],
+                    ['handle' => 'summary', 'field' => ['type' => 'textarea']],
+                ]],
+                ['display' => 'Access and pacing', 'fields' => [
+                    ['handle' => 'product', 'field' => ['type' => 'text']],
+                    ['handle' => 'sequencing_mode', 'field' => ['type' => 'select', 'options' => ['none' => 'None']]],
+                    ['handle' => 'drip_mode', 'field' => ['type' => 'select', 'options' => ['none' => 'None']]],
+                    ['handle' => 'drip_day_of_month', 'field' => ['type' => 'integer', 'if' => ['drip_mode' => 'equals day_of_month']]],
+                    ['handle' => 'own_field', 'field' => ['type' => 'text']],
+                ]],
+                ['display' => 'Team', 'fields' => [
+                    ['handle' => 'team_seats', 'field' => ['type' => 'integer']],
+                ]],
+            ]]],
+        ])->save();
+
+        $this->artisan('courses:install', ['--merge' => true])
+            ->expectsOutputToContain('+ material condition drip_mode')
+            ->assertSuccessful();
+
+        $contents = Blueprint::find('collections.courses.course')->contents();
+        $sections = $contents['tabs']['main']['sections'];
+        $fields = collect($sections)->flatMap(fn ($s) => $s['fields'])->keyBy('handle');
+
+        foreach (['product', 'sequencing_mode', 'drip_mode', 'drip_day_of_month', 'team_seats'] as $handle) {
+            expect(hiddenForMaterial($fields[$handle]['field']))->toBeTrue($handle);
+        }
+
+        expect($fields['drip_day_of_month']['field']['if']['drip_mode'])->toBe('equals day_of_month')
+            ->and($fields['own_field']['field'])->not->toHaveKeys(['if', 'unless'])
+            ->and(collect($sections[1]['fields'])->pluck('handle')->all())->toContain('body', 'downloads')
+            ->and(collect($sections[0]['fields'])->pluck('handle')->all())->toContain('kind');
+
+        // A second run finds nothing more to do.
+        $this->artisan('courses:install', ['--merge' => true])->expectsOutputToContain('up to date')->assertSuccessful();
+    });
+
+    it('answers the kind of a course entry by slug or by id, for a picker elsewhere', function () {
+        $id = $this->makeCourse('cvt-101');
+
+        expect(Courses::kind('baraye'))->toBe('material')
+            ->and(Courses::kind($this->material))->toBe('material')
+            ->and(Courses::kind($id))->toBe('course')
+            ->and(Courses::kind('missing'))->toBeNull();
     });
 });
 
@@ -182,13 +277,13 @@ describe('no progress', function () {
 });
 
 describe('downloads', function () {
-    it('groups the downloads in the order they were entered, with a format from the file when none is given', function () {
+    it('lists the downloads group by group, in the order entered, with the format taken from the file', function () {
         PrivateMedia::$signs = true;
 
         $material = Courses::material($this->buyer, 'baraye');
 
         expect(collect($material['downloads'])->map(fn ($d) => $d['group'].'/'.$d['label'].'/'.$d['format'])->all())
-            ->toBe(['SATB/Score/PDF', 'SSA/Score/PDF', 'SATB/Rehearsal track/MP3', '/Notes/TXT'])
+            ->toBe(['SATB/Score/PDF', 'SATB/Rehearsal track/MP3', 'SSA/Score/PDF', '/Notes/TXT'])
             ->and(collect($material['download_groups'])->pluck('group')->all())->toBe(['SATB', 'SSA', ''])
             ->and(collect($material['download_groups'][0]['downloads'])->pluck('label')->all())->toBe(['Score', 'Rehearsal track'])
             ->and($material['download_groups'][0]['count'])->toBe(2)
@@ -227,15 +322,95 @@ describe('downloads', function () {
     it('leaves out a download whose file is not in the private container', function () {
         PrivateMedia::$signs = true;
         Entry::find($this->material)->set('downloads', [
-            ['id' => 'x', 'file' => 'assets::baraye/public.pdf', 'label' => 'Public'],
-            ['id' => 'y', 'file' => 'baraye/satb.pdf', 'label' => 'Private'],
+            ['id' => 'g', 'group' => '', 'files' => [
+                ['id' => 'x', 'file' => 'assets::baraye/public.pdf', 'label' => 'Public'],
+                ['id' => 'y', 'file' => 'baraye/satb.pdf', 'label' => 'Private'],
+            ]],
         ])->save();
 
         expect(collect(Courses::material($this->buyer, 'baraye')['downloads'])->pluck('label')->all())->toBe(['Private']);
     });
 
+    it('still reads rows saved one file per row, with their own group', function () {
+        PrivateMedia::$signs = true;
+        Entry::find($this->material)->set('downloads', [
+            ['id' => 'a', 'file' => 'baraye/satb.pdf', 'label' => 'Score', 'group' => 'SATB'],
+            ['id' => 'b', 'file' => 'baraye/ssa.pdf', 'label' => 'Score', 'group' => 'SSA'],
+            ['id' => 'c', 'file' => 'baraye/satb.mp3', 'label' => 'Track', 'group' => 'SATB'],
+        ])->save();
+
+        $groups = Courses::material($this->buyer, 'baraye')['download_groups'];
+
+        expect(collect($groups)->pluck('group')->all())->toBe(['SATB', 'SSA'])
+            ->and(collect($groups[0]['downloads'])->pluck('label')->all())->toBe(['Score', 'Track']);
+    });
+
     it('renders the body as HTML', function () {
         expect(Courses::material($this->buyer, 'baraye')['body'])->toContain('<p>Sing it slowly.</p>');
+    });
+
+    it('gives the public cover as a URL, for a card', function () {
+        expect(Courses::material($this->buyer, 'baraye')['cover_url'])->toBe('/assets/baraye/cover.jpg')
+            ->and(Courses::course('baraye')['cover_url'])->toBe('/assets/baraye/cover.jpg');
+    });
+});
+
+describe('images in the text', function () {
+    it('signs a private image only for somebody with access', function () {
+        PrivateMedia::$signs = true;
+
+        expect(Courses::material($this->buyer, 'baraye')['body'])
+            ->toContain('src="/!/private-media/course:baraye/baraye/figure.png?signature=test"');
+    });
+
+    it('leaves a private image out for a stranger, a guest, and when it cannot be signed', function () {
+        PrivateMedia::$signs = true;
+
+        expect(Courses::material($this->stranger, 'baraye')['body'])->not->toContain('<img')->not->toContain('figure.png')
+            ->and(Courses::material(null, 'baraye')['body'])->not->toContain('<img')
+            ->and(Courses::material($this->stranger, 'baraye')['body'])->toContain('Sing it slowly.');
+
+        PrivateMedia::$signs = false;
+
+        expect(Courses::material($this->buyer, 'baraye')['body'])->not->toContain('<img')->not->toContain('figure.png');
+    });
+
+    it('keeps a public image public', function () {
+        Entry::find($this->material)->set('body', [
+            ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::assets::baraye/cover.jpg']]]],
+        ])->save();
+
+        expect(Courses::material($this->stranger, 'baraye')['body'])->toContain('src="/assets/baraye/cover.jpg"');
+    });
+
+    it('signs a private image block on a page of a material, and drops it for a stranger', function () {
+        PrivateMedia::$signs = true;
+        $page = $this->makeLesson($this->material, 'figures', ['item_type' => 'text', 'blocks' => [
+            ['id' => 'i1', 'type' => 'image', 'image' => 'baraye/figure.png', 'caption' => 'Figure 1'],
+        ]]);
+
+        $blocks = app(LessonBlocks::class)->for(Entry::find($page), $this->buyer, 'course:baraye');
+
+        expect($blocks[0])->toMatchArray([
+            'type' => 'image',
+            'url' => '/!/private-media/course:baraye/baraye/figure.png?signature=test',
+            'caption' => 'Figure 1',
+            'private' => true,
+        ])->and(app(LessonBlocks::class)->for(Entry::find($page), null, 'course:baraye'))->toBe([]);
+    });
+
+    it('picks text images from the private container, and from the public one with a notice without private-media', function () {
+        $body = fn () => Blueprint::find('collections.courses.course')->field('body')->config();
+
+        expect($body()['container'])->toBe('private');
+
+        config()->set('private-media.source.container', null);
+        // The site's public container; the bed still has the one named "private".
+        config()->set('courses.downloads.container', 'assets');
+        $this->artisan('courses:install', ['--force' => true])->assertSuccessful();
+
+        expect($body()['container'])->toBe('assets')
+            ->and($body()['instructions'])->toStartWith('Public:');
     });
 
     it('answers null for a course that is not a material', function () {
