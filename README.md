@@ -1,7 +1,8 @@
 # Statamic Courses
 
 Courses for Statamic 6: modules and lessons as entries, a state per learner and lesson, sequencing,
-drip by schedule or by progress, and a progress rollup. Access to a course is asked of
+drip by schedule or by progress, and a progress rollup; and materials, pages with text and
+protected downloads that open like a course but carry no progress. Access to a course is asked of
 [statamic-entitlements](https://github.com/goldnead/statamic-entitlements). Antlers tags and a
 form route for the front end, and a "Course Progress" screen in the Control Panel.
 
@@ -31,7 +32,7 @@ routes as you like, `url` is then null and nothing breaks.
 
 ## Structure
 
-A **course** entry carries `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (see
+A **course** entry carries `kind` (`course`, the default, or `material`: see [Material](#material)), `sequencing_mode` (`none`, `section`, `lesson`), `drip_mode` (see
 below) and `product`, the entitlements product that opens it (defaults to the course slug), plus
 `bundles`, `team_seats`, `on_payment_failure` and `section_audiences`.
 
@@ -132,6 +133,47 @@ Without private-media the toggle is not offered. `courses:install` points the pu
 `courses.downloads.container` or the first container other than the private one. On a
 multi-brand site a download is checked in the brand of the request that fetches it.
 
+## Material
+
+A course entry has a **kind**: `course` (lessons, progress, sequencing, drip) or `material`. A
+course without the field is a course, so existing courses need no change. A material is a page
+with text and downloads, opened exactly like a course (`product`, `bundles`, teams, holds), but
+with none of the pacing: no progress is recorded, nobody is enrolled, no drip runs, and it is not
+on the Course Progress screen. A sheet-music bundle, a workbook, a quick reference.
+
+- `body`: Bard text; images come from the public download container.
+- `downloads`: rows of file, label, group and format. The file is picked from
+  statamic-private-media's container only and served through a link signed for
+  `course:<slug>`, which courses answers with `Courses::canAccess()`; private-media checks it
+  again when the file is fetched. Rows with the same group are listed together, in the order the
+  group first appears; an empty format falls back to the file extension. Without private-media
+  `courses:install` leaves the download list out: there is no protected way to serve it.
+- Lessons pointing at a material are further pages. They are never locked and record nothing;
+  their blocks render with `{{ courses:blocks }}` as usual.
+
+```antlers
+{{ courses kind="material" only="accessible" }}<a href="{{ url }}">{{ title }}</a>{{ /courses }}
+
+{{ courses:material course="baraye" }}
+    <h1>{{ title }}</h1>
+    {{ body }}
+    {{ download_groups }}
+        {{ if group }}<h2>{{ group }}</h2>{{ /if }}
+        {{ downloads }}<a href="{{ url }}">{{ label }}</a> {{ format }}, {{ size }}{{ /downloads }}
+    {{ /download_groups }}
+    {{ pages }}<a href="{{ url }}">{{ title }}</a>{{ /pages }}
+{{ /courses:material }}
+```
+
+`courses:material` takes the course entry in context when `course` is left out. It renders
+nothing for a guest, a learner without access and a course of kind `course`; super users see the
+text and pages for the live preview. `Courses::material($user, $slug)` gives the same data in PHP
+(downloads only when `$user` has access). For a material, `summary()`, `outline()`, `enroll()`
+and the drip writes answer null, and a lesson write is refused with reason `material`.
+
+How a material is sold is not this addon's business: a product in entitlements opens it, like a
+course.
+
 ## Quiz
 
 A quiz lesson names a statamic-assessments questionnaire (`assessment`) and optionally
@@ -212,7 +254,7 @@ The route needs a signed-in user with access to the course, carries CSRF, answer
 and otherwise redirects back or to a local `_redirect`. A refusal carries a reason code, as
 `{"error": "…"}` in JSON and as the flashed `courses` error (`{{ get_error:courses }}`) on a form
 post: `no_access` (403), `unknown_course` (404), `unknown_lesson`, `locked`, `proof_required`,
-`not_video`, `not_acknowledgeable` (422). `Courses::refusalReason()` gives the same answer in PHP.
+`not_video`, `not_acknowledgeable`, `material` (422). `Courses::refusalReason()` gives the same answer in PHP.
 
 In `courses:lessons`, a lesson a test-out completed has `status: skipped` and `is_skipped: true`;
 its `progress:status` stays `completed`. Switch it off with `COURSES_ROUTES_ENABLED=false`; the form tag then renders
@@ -222,7 +264,8 @@ nothing.
 
 **Course Progress** (permission `view course progress`): per course the learners, how many are in
 progress or completed, the completion rate among those who started, how many are stuck (no
-activity for `cp.stuck_after_days`, default 14) and the last activity. It sits in the suite's shared
+activity for `cp.stuck_after_days`, default 14) and the last activity. Materials record no
+progress and are not listed. It sits in the suite's shared
 nav section when statamic-payments provides one, under Content otherwise.
 
 ## Webhooks

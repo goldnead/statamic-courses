@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased (proposed 0.4.0)
+
+### Upgrading
+- No migration, no new permission. Run `php artisan courses:install --merge` to add the fields
+  `kind`, `body` and `downloads` to the course blueprint (see first with `--dry-run`).
+- Existing courses change nothing: a course without `kind` is a course.
+
+### Added
+- Material: a course entry of kind `material` is a page with text (Bard, images from the public
+  container) and downloads, opened like a course through entitlements, without progress,
+  sequencing or drip. Lessons of a material are further pages, never locked.
+- Material downloads (file, label, group, format) come only from statamic-private-media's
+  container and are signed for `course:<slug>`, which courses already answers with
+  `Courses::canAccess()`. Without private-media the download list is not installed.
+- `Courses::material($user, $slug)` and `{{ courses:material }}`: `body`, `downloads`,
+  `download_groups` (in the order a group first appears), `pages`. Links are signed only for
+  somebody with access.
+- `{{ courses kind="material" }}` / `kind="course"`, and `kind` / `is_material` on every course.
+
+### Changed
+- For a material: `enroll()`, `recordBilling()`, `pauseDrip()`, `resumeDrip()`, `advanceToWeek()`,
+  `summary()` and `outline()` answer null, every lesson write is refused (reason `material`, also
+  on `POST /!/courses/progress`), and the Course Progress screen leaves it out. A hold
+  (`suspendAccess()`, `on_payment_failure: revoke`) still closes it; `pause_drip` reads as `keep`.
+
 ## 0.3.0 (2026-09-24)
 
 ### Upgrading
