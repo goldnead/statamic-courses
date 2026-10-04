@@ -6,6 +6,9 @@
 - No migration, no new permission. Run `php artisan courses:install --merge` to add the fields
   `kind`, `body` and `downloads` to the course blueprint (see first with `--dry-run`).
 - Existing courses change nothing: a course without `kind` is a course.
+- `--merge` adds `unless: kind: equals material` (or `kind: not material` to an existing `if`) to
+  product, bundles, sequencing, drip, payment failure, team seats and section rules. It renames
+  nothing: collection and section titles a site already has stay as they are.
 
 ### Added
 - Material: a course entry of kind `material` is a page with text (Bard, images from the public
@@ -18,6 +21,17 @@
   `download_groups` (in the order a group first appears), `pages`. Links are signed only for
   somebody with access.
 - `{{ courses kind="material" }}` / `kind="course"`, and `kind` / `is_material` on every course.
+- Images in a material's text come from private-media's container and are signed per viewer like
+  the downloads; without access they are left out. Without private-media the field picks from the
+  public container and says so.
+- Downloads are entered as groups (a voicing, a part) with their files underneath; the format is
+  taken from the file. Rows saved one file per row are still read.
+- `cover` (public image for a card, `cover_url` on every course).
+- Lesson block `image`: from private-media's container, signed for the course, or left out.
+- `Courses::kind($slugOrEntryId)` for other addons that list course entries.
+- The kind is a column in the course entries listing.
+- `courses:install --merge` gives existing fields the Material visibility condition and places a
+  new section right behind the one holding the field before it (Material behind the main section).
 
 ### Changed
 - For a material: `enroll()`, `recordBilling()`, `pauseDrip()`, `resumeDrip()`, `advanceToWeek()`,

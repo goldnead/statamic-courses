@@ -123,7 +123,9 @@ purchase. statamic-entitlements has no seats of its own yet; the team lives in
 
 Besides the markdown `content` (kept, rendered first), a lesson has `blocks`: text, callout,
 columns, FAQ, video (YouTube and Vimeo become players; with statamic-consent installed they wait
-behind `{{ consent:gate }}` for the `youtube` or `vimeo` service), download and button.
+behind `{{ consent:gate }}` for the `youtube` or `vimeo` service), image (from private-media's
+container, signed for the course like a private download; without private-media from the public
+one, marked as public), download and button.
 
 A download marked “only for learners of this course” takes its file from its own field on
 statamic-private-media's container and is served through a link signed for `course:<slug>`.
@@ -141,15 +143,28 @@ with text and downloads, opened exactly like a course (`product`, `bundles`, tea
 with none of the pacing: no progress is recorded, nobody is enrolled, no drip runs, and it is not
 on the Course Progress screen. A sheet-music bundle, a workbook, a quick reference.
 
-- `body`: Bard text; images come from the public download container.
-- `downloads`: rows of file, label, group and format. The file is picked from
-  statamic-private-media's container only and served through a link signed for
+- `cover`: a public image for the card in a member area (`cover_url` on every course).
+- `body`: Bard text. Its images are picked from statamic-private-media's container, because on a
+  paid material the figures are the content: each is rendered as a link signed for
+  `course:<slug>` for somebody with access, and left out for everybody else (no `<img>`, no
+  path). An image from a public container stays public. Without private-media the field picks
+  from the public container and says so in its instructions.
+- `downloads`: one row per group (a voicing, a part), its files underneath, each with a label.
+  The file is picked from private-media's container only and served through a link signed for
   `course:<slug>`, which courses answers with `Courses::canAccess()`; private-media checks it
-  again when the file is fetched. Rows with the same group are listed together, in the order the
-  group first appears; an empty format falls back to the file extension. Without private-media
+  again when the file is fetched. The format is the file extension. Without private-media
   `courses:install` leaves the download list out: there is no protected way to serve it.
 - Lessons pointing at a material are further pages. They are never locked and record nothing;
-  their blocks render with `{{ courses:blocks }}` as usual.
+  their blocks render with `{{ courses:blocks }}` as usual. The lesson `image` block works the
+  same way as the text images: from private-media's container, signed, or left out.
+
+In the Control Panel a material shows only these fields: product, bundles, sequencing, drip,
+payment failure, team seats and section rules are hidden once the kind is Material (their values
+stay and are ignored). The kind is a column in the entries listing. `courses:install --merge`
+gives fields an older blueprint already has the same condition and puts the Material section
+right behind the main one. It does not rename what the site has: a collection created before
+German labels shipped stays "Courses", a section stays "Access and pacing"; rename those in the
+Control Panel if you like.
 
 ```antlers
 {{ courses kind="material" only="accessible" }}<a href="{{ url }}">{{ title }}</a>{{ /courses }}
@@ -170,6 +185,10 @@ nothing for a guest, a learner without access and a course of kind `course`; sup
 text and pages for the live preview. `Courses::material($user, $slug)` gives the same data in PHP
 (downloads only when `$user` has access). For a material, `summary()`, `outline()`, `enroll()`
 and the drip writes answer null, and a lesson write is refused with reason `material`.
+
+Another addon that lists course entries (a picker for what a product opens, say) asks
+`Courses::kind($slugOrEntryId)`: `course`, `material`, or null for no such course. The raw field
+is `kind` on the entry; a missing value means `course`.
 
 How a material is sold is not this addon's business: a product in entitlements opens it, like a
 course.
