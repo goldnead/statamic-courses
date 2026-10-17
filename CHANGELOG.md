@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 (2026-10-18)
+
+### Added
+- Content boxes on lessons (needs statamic-offers 1.17 or later; without it nothing is shown). The lesson and the
+  course get a "Boxes" section: `lesson_boxes` / `course_boxes` (which box stands under the video or at the end of the
+  lesson) and, on the lesson, `video_hints` (a hint button over the video between two times, `mm:ss`, with an
+  optional short text). The words, the link and the audience live in the box.
+- `Courses::lessonBoxes($user, $courseSlug, $lessonSlug)` returns `below_video`, `end` and `hints` for one learner,
+  asking `Offers::contentBoxes()` with the learner as viewer, so the box's audience (LeadHub tags, groups) decides.
+  Boxes of the course come before those of the lesson. A hint carries `from`, `to` (null: until the end), `text`,
+  `label`, `url`.
+
+### Upgrading
+- No migration. Run `php artisan courses:install --merge` to add the fields to the lesson and course blueprints
+  (see first with `--dry-run`), and `php artisan offers:install-boxes` (statamic-offers) for the box collection.
+
 ## 0.4.0 (2026-10-04)
 
 ### Upgrading

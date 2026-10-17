@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static array<string, mixed>|null outline(mixed $user, string $courseSlug)
  * @method static array<string, mixed>|null summary(mixed $user, string $courseSlug)
  * @method static array<string, mixed>|null lesson(mixed $user, string $courseSlug, string $lessonSlug)
+ * @method static array{below_video: list<array<string, mixed>>, end: list<array<string, mixed>>, hints: list<array<string, mixed>>} lessonBoxes(mixed $user, string $courseSlug, string $lessonSlug)
  * @method static bool isLessonLocked(mixed $user, string $courseSlug, string $lessonSlug)
  * @method static array<string, mixed>|null updateLessonProgress(mixed $user, string $courseSlug, string $lessonSlug, array $payload)
  * @method static array<string, mixed>|null setLessonCompletion(mixed $user, string $courseSlug, string $lessonSlug, bool $completed)

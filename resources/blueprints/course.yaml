@@ -254,6 +254,38 @@ tabs:
                     type: taggable
                     display: 'LeadHub segments'
                     width: 33
+      -
+        display: Boxes
+        instructions: 'Small invitations from statamic-offers (content boxes) that stand on every lesson of this course. A box on a single lesson is set on the lesson.'
+        fields:
+          -
+            handle: course_boxes
+            field:
+              type: grid
+              display: 'Boxes on every lesson'
+              mode: table
+              add_row: 'Add box'
+              fields:
+                -
+                  handle: box
+                  field:
+                    type: entries
+                    display: Box
+                    max_items: 1
+                    mode: select
+                    collections:
+                      - content_boxes
+                    width: 50
+                -
+                  handle: place
+                  field:
+                    type: select
+                    display: Place
+                    default: end
+                    options:
+                      below_video: 'Under the video'
+                      end: 'End of the lesson'
+                    width: 50
   sidebar:
     display: Sidebar
     sections:

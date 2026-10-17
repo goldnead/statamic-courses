@@ -135,6 +135,23 @@ Without private-media the toggle is not offered. `courses:install` points the pu
 `courses.downloads.container` or the first container other than the private one. On a
 multi-brand site a download is checked in the brand of the request that fetches it.
 
+## Boxes under a lesson
+
+With [statamic-offers](https://github.com/goldnead/statamic-offers) 1.17 or later, a lesson can show *content
+boxes*: a small invitation (headline, text, button) such as "how it can go on" with a course, or a waiting list.
+The lesson blueprint has a "Boxes" section: `lesson_boxes` says which box stands under the video or at the end of
+the lesson, `video_hints` shows a dismissible hint button over the video between two times (`mm:ss`). The course
+has `course_boxes` for a box on every lesson. The words, the target and the audience (LeadHub tags, user groups)
+are set on the box itself, once, and reused.
+
+```php
+$boxes = Courses::lessonBoxes($user, 'cvt-im-chor', 'lektion-5');
+// ['below_video' => [...], 'end' => [...], 'hints' => [['from' => 2634, 'to' => null, 'text' => ..., 'label' => ..., 'url' => ...]]]
+```
+
+Courses does not draw anything: the front end of the site renders the lists. Without statamic-offers the lists are
+empty. A box that must not be shown to this learner (audience, offer sold out) is not in the list.
+
 ## Material
 
 A course entry has a **kind**: `course` (lessons, progress, sequencing, drip) or `material`. A
