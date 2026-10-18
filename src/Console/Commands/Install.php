@@ -612,8 +612,14 @@ class Install extends Command
      */
     protected function pointEntriesFieldsAt(array $contents, string $courses, string $lessons): array
     {
-        array_walk_recursive($contents, function (&$value) use ($courses, $lessons): void {
-            if ($value === 'courses') {
+        // The boxes collection belongs to statamic-offers; named by its config
+        // so a site that renamed it there is followed here.
+        $boxes = trim((string) config('statamic-offers.boxes.collection', 'content_boxes')) ?: 'content_boxes';
+
+        array_walk_recursive($contents, function (&$value) use ($courses, $lessons, $boxes): void {
+            if ($value === 'content_boxes') {
+                $value = $boxes;
+            } elseif ($value === 'courses') {
                 $value = $courses;
             } elseif ($value === 'course_lessons') {
                 $value = $lessons;

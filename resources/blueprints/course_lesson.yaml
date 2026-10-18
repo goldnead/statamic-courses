@@ -383,6 +383,77 @@ tabs:
               type: taggable
               display: 'LeadHub segments'
               width: 50
+      -
+        display: Boxes
+        instructions: 'Small invitations from statamic-offers (content boxes): a course, a waiting list. The words, the link and the audience live in the box; here you only say where it stands. Nothing is shown without statamic-offers.'
+        fields:
+          -
+            handle: lesson_boxes
+            field:
+              type: grid
+              display: 'Boxes on this lesson'
+              mode: table
+              add_row: 'Add box'
+              fields:
+                -
+                  handle: box
+                  field:
+                    type: entries
+                    display: Box
+                    max_items: 1
+                    mode: select
+                    collections:
+                      - content_boxes
+                    width: 50
+                -
+                  handle: place
+                  field:
+                    type: select
+                    display: Place
+                    default: end
+                    options:
+                      below_video: 'Under the video'
+                      end: 'End of the lesson'
+                    width: 50
+          -
+            handle: video_hints
+            field:
+              type: grid
+              display: 'Hint button in the video'
+              instructions: 'A button that appears over the video between "From" and "To" (mm:ss). Empty "To": until the end. It uses the label and link of the box; the short text is optional (otherwise the headline of the box). The learner can dismiss it.'
+              mode: table
+              add_row: 'Add hint'
+              fields:
+                -
+                  handle: box
+                  field:
+                    type: entries
+                    display: Box
+                    max_items: 1
+                    mode: select
+                    collections:
+                      - content_boxes
+                    width: 33
+                -
+                  handle: from
+                  field:
+                    type: text
+                    display: From
+                    placeholder: '43:54'
+                    width: 17
+                -
+                  handle: to
+                  field:
+                    type: text
+                    display: To
+                    placeholder: '56:57'
+                    width: 17
+                -
+                  handle: text
+                  field:
+                    type: text
+                    display: 'Short text'
+                    width: 33
   sidebar:
     display: Sidebar
     sections:

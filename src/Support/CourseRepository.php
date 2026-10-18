@@ -145,6 +145,7 @@ class CourseRepository
                     trim((string) $row['section_key']) => $this->audience($row['entitlements'] ?? null, $row['tags'] ?? null, $row['segments'] ?? null, $row['groups'] ?? null),
                 ])
                 ->all(),
+            'boxes' => $this->boxRows($entry->get('course_boxes')),
             // Null when the collection has no route, as on the source site.
             'url' => $entry->url(),
         ];
@@ -212,6 +213,8 @@ class CourseRepository
             'drip_after' => $this->intOrNull($entry->get('drip_after')),
             'drip_date' => $this->dateOrNull($entry->get('drip_date')),
             'prerequisite_slugs' => $prerequisiteSlugs,
+            'boxes' => $this->boxRows($entry->get('lesson_boxes')),
+            'video_hints' => $this->hintRows($entry->get('video_hints')),
             'audience' => $this->audience($entry->get('audience_entitlements'), $entry->get('audience_tags'), $entry->get('audience_segments'), $entry->get('audience_groups')),
             'assessment' => $this->stringOrNull($entry->get('assessment')),
             // Stored under assessment_* handles: adriangoldner.com keeps its own
@@ -219,6 +222,59 @@ class CourseRepository
             'pass_score' => $this->intOrNull($entry->get('assessment_min_score')),
             'pass_levels' => $this->strings($entry->get('assessment_pass_levels')),
         ];
+    }
+
+    /**
+     * The rows of a boxes grid: which content box stands where. A row without
+     * a box is nothing; an unknown place is the end of the lesson.
+     *
+     * @return list<array{box: string, place: string}>
+     */
+    protected function boxRows(mixed $value): array
+    {
+        $rows = [];
+
+        foreach (is_array($value) ? $value : [] as $row) {
+            $box = is_array($row) ? ($this->ids($row['box'] ?? null)[0] ?? null) : null;
+
+            if ($box !== null) {
+                $rows[] = ['box' => $box, 'place' => $this->oneOf($row['place'] ?? null, ['below_video', 'end'], 'end')];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The rows of the video hints: a box, the stretch of the video it shows in
+     * (seconds; `to` null means until the end) and an optional short text. A
+     * row without a box or without a start time cannot be placed and is left out.
+     *
+     * @return list<array{box: string, from: int, to: int|null, text: string}>
+     */
+    protected function hintRows(mixed $value): array
+    {
+        $rows = [];
+
+        foreach (is_array($value) ? $value : [] as $row) {
+            $box = is_array($row) ? ($this->ids($row['box'] ?? null)[0] ?? null) : null;
+            $from = is_array($row) ? self::parseDurationSeconds($row['from'] ?? null) : null;
+
+            if ($box === null || $from === null) {
+                continue;
+            }
+
+            $to = self::parseDurationSeconds($row['to'] ?? null);
+
+            // An end before the start cannot be placed either.
+            if ($to !== null && $to <= $from) {
+                continue;
+            }
+
+            $rows[] = ['box' => $box, 'from' => $from, 'to' => $to, 'text' => trim((string) ($row['text'] ?? ''))];
+        }
+
+        return $rows;
     }
 
     /**

@@ -130,5 +130,21 @@
     "Alt text": "Alternativtext",
     "Shown only to somebody who may open the course, through a signed link.": "Sieht nur, wer den Kurs öffnen darf, über einen signierten Link.",
     "Public: without statamic-private-media these images are reachable by anybody with the link.": "Öffentlich: ohne statamic-private-media sind diese Bilder für alle mit dem Link erreichbar.",
-    "Empty: everybody in the course. Otherwise only learners who match one of these (product handles, group, tag, segment handle); for everybody else the lesson is not part of the course.": "Leer: alle im Kurs. Sonst nur Lernende, auf die eines davon zutrifft (Produkt-Handles, Gruppe, Tag, Segment-Handle); für alle anderen gehört die Lektion nicht zum Kurs."
+    "Empty: everybody in the course. Otherwise only learners who match one of these (product handles, group, tag, segment handle); for everybody else the lesson is not part of the course.": "Leer: alle im Kurs. Sonst nur Lernende, auf die eines davon zutrifft (Produkt-Handles, Gruppe, Tag, Segment-Handle); für alle anderen gehört die Lektion nicht zum Kurs.",
+    "Boxes": "Kästen",
+    "Small invitations from statamic-offers (content boxes): a course, a waiting list. The words, the link and the audience live in the box; here you only say where it stands. Nothing is shown without statamic-offers.": "Kleine Einladungen aus statamic-offers (Kästen): ein Kurs, eine Warteliste. Worte, Link und Zielgruppe stehen im Kasten; hier legst du nur fest, wo er steht. Ohne statamic-offers wird nichts angezeigt.",
+    "Boxes on this lesson": "Kästen auf dieser Lektion",
+    "Add box": "Kasten hinzufügen",
+    "Box": "Kasten",
+    "Place": "Platz",
+    "Under the video": "Unter dem Video",
+    "End of the lesson": "Am Ende der Lektion",
+    "Hint button in the video": "Hinweis-Knopf im Video",
+    "A button that appears over the video between \"From\" and \"To\" (mm:ss). Empty \"To\": until the end. It uses the label and link of the box; the short text is optional (otherwise the headline of the box). The learner can dismiss it.": "Ein Knopf, der zwischen „Von“ und „Bis“ (mm:ss) über dem Video erscheint. „Bis“ leer: bis zum Ende. Er nimmt Beschriftung und Link des Kastens; der kurze Text ist optional (sonst die Überschrift des Kastens). Wer ihn wegklickt, sieht ihn nicht wieder.",
+    "Add hint": "Hinweis hinzufügen",
+    "From": "Von",
+    "To": "Bis",
+    "Short text": "Kurzer Text",
+    "Small invitations from statamic-offers (content boxes) that stand on every lesson of this course. A box on a single lesson is set on the lesson.": "Kleine Einladungen aus statamic-offers (Kästen), die auf jeder Lektion dieses Kurses stehen. Ein Kasten nur auf einer Lektion wird an der Lektion eingestellt.",
+    "Boxes on every lesson": "Kästen auf jeder Lektion"
 }

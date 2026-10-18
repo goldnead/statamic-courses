@@ -37,6 +37,7 @@
     },
     "suggest": {
         "goldnead/statamic-entitlements": "Answers who may open a course (1.3 or later). Without it, or another CourseAccess binding, every course is closed.",
+        "goldnead/statamic-offers": "Content boxes under a lesson and hint buttons in the video (1.17 or later).",
         "goldnead/statamic-webhook-manager": "Sends course events (enrolled, lesson completed, quiz passed, ...) to outbound webhooks."
     },
     "conflict": {

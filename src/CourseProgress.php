@@ -24,6 +24,7 @@ use Goldnead\Courses\Support\CourseRepository;
 use Goldnead\Courses\Support\EventRecorder;
 use Goldnead\Courses\Support\Holds;
 use Goldnead\Courses\Support\LearnerId;
+use Goldnead\Courses\Support\LessonBoxes;
 use Goldnead\Courses\Support\MaterialContent;
 use Goldnead\Courses\Support\Teams;
 use Illuminate\Support\Carbon;
@@ -587,6 +588,30 @@ class CourseProgress
         $context = $this->context($user, $courseSlug);
 
         return $context === null ? null : $this->lessonFromContext($context, $lessonSlug);
+    }
+
+    /**
+     * The content boxes (statamic-offers) a lesson shows this learner: those
+     * under the video, those at the end, and the hint buttons over the video
+     * with their times in seconds. Boxes set on the course stand before those
+     * of the lesson. Each list is empty when nothing is set, when the lesson
+     * is unknown, or without statamic-offers. Asks nothing about access: the
+     * page that shows the lesson has decided that already.
+     *
+     * @return array{below_video: list<array<string, mixed>>, end: list<array<string, mixed>>, hints: list<array<string, mixed>>}
+     */
+    public function lessonBoxes(mixed $user, string $courseSlug, string $lessonSlug): array
+    {
+        $course = $this->courses->findCourse($courseSlug);
+        $lesson = $course === null
+            ? null
+            : $this->courses->lessonsFor((string) $course['id'])->first(fn (array $row): bool => $row['slug'] === $lessonSlug);
+
+        if ($course === null || $lesson === null) {
+            return ['below_video' => [], 'end' => [], 'hints' => []];
+        }
+
+        return app(LessonBoxes::class)->for($course, $lesson, $user);
     }
 
     public function isLessonLocked(mixed $user, string $courseSlug, string $lessonSlug): bool
