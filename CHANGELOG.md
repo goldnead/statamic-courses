@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-10-18
+
+### Added
+- Funnels map: with statamic-brand-context 1.17 or later, every course is an object the map can point at
+  (`type` `course`, id = the course slug). The map shows the title, a link to the entry in the Control Panel, whether
+  it is published, and one number: learners who started the course in the period (enrollments created in it). A
+  course that does not exist has no number. Without brand-context nothing is registered.
+
 ## 0.5.1 (2026-10-18)
 
 ### Fixed

@@ -353,6 +353,13 @@ quiz answers, no lesson state rows.
 | `courses.team_member_added` | `member` (the user, or `{email}` without an account), `owner`, `course`, `product` |
 | `courses.team_member_removed` | as `team_member_added` |
 
+## Funnels map
+
+With statamic-brand-context 1.17 or later, the funnels map can show courses as cards. The provider is
+`Goldnead\Courses\Integrations\Map\CourseMapObjects` (type `course`, id = course slug). Each card shows the title,
+a link to the entry in the Control Panel, published or not, and the learners who started the course in the
+period. Without brand-context nothing is registered and the map simply has no course type.
+
 ## Access
 
 `Goldnead\Courses\Contracts\CourseAccess` is the seam. With statamic-entitlements installed it asks

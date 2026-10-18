@@ -2,11 +2,14 @@
 
 namespace Goldnead\Courses;
 
+use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
+use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\Courses\Access\ClosedCourseAccess;
 use Goldnead\Courses\Access\EntitlementsCourseAccess;
 use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Integrations\AssessmentsBridge;
 use Goldnead\Courses\Integrations\CourseMediaAccess;
+use Goldnead\Courses\Integrations\Map\CourseMapObjects;
 use Goldnead\Courses\Integrations\PaymentsBridge;
 use Goldnead\Courses\Integrations\WebhookManager\WebhookManagerBridge;
 use Goldnead\Entitlements\EntitlementManager;
@@ -97,6 +100,12 @@ class ServiceProvider extends AddonServiceProvider
         parent::boot();
 
         $this->registerWebhookManagerBridge();
+
+        // Courses as cards on the funnels map. brand-context is a `suggest`:
+        // the interface is checked by name, the provider class not loaded without it.
+        if (interface_exists(ProvidesMapObjects::class)) {
+            $this->app->make(MapObjectRegistry::class)->register(CourseMapObjects::class);
+        }
     }
 
     /**
