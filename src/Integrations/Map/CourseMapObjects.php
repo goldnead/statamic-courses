@@ -93,7 +93,7 @@ class CourseMapObjects implements ProvidesMapObjects
             ->where('slug', $slug)
             ->first();
 
-        return $entry instanceof StatamicEntry ? $entry : null;
+        return $entry instanceof StatamicEntry && $entry->get('kind') !== CourseRepository::KIND_MATERIAL ? $entry : null;
     }
 
     /**
@@ -105,7 +105,10 @@ class CourseMapObjects implements ProvidesMapObjects
             ->where('collection', $this->courses->coursesCollection())
             ->orderBy('title')
             ->get()
-            ->filter(fn ($entry): bool => $entry instanceof StatamicEntry)
+            // Material entries live in the same collection but are not courses: a
+            // funnel does not hand people over to a worksheet.
+            ->filter(fn ($entry): bool => $entry instanceof StatamicEntry
+                && $entry->get('kind') !== CourseRepository::KIND_MATERIAL)
             ->values();
     }
 
@@ -123,15 +126,13 @@ class CourseMapObjects implements ProvidesMapObjects
 
     protected function map(StatamicEntry $entry): MapObject
     {
-        $material = $entry->get('kind') === CourseRepository::KIND_MATERIAL;
-
         return new MapObject(
             type: self::TYPE,
             id: (string) $entry->slug(),
             label: (string) ($entry->get('title') ?: $entry->slug()),
             cpUrl: $entry->editUrl(),
             enabled: (bool) $entry->published(),
-            detail: $material ? __('courses::map.material') : null,
+            detail: null,
         );
     }
 }

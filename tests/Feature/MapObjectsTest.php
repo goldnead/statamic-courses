@@ -44,6 +44,13 @@ it('lists courses by title and narrows them by title or slug, limited', function
         ->and($this->map->objects('gibt es nicht'))->toBe([]);
 });
 
+it('leaves material entries out: they share the collection but are not courses', function () {
+    $this->makeCourse('arbeitsblatt', ['title' => 'Arbeitsblatt', 'kind' => 'material']);
+
+    expect(array_map(fn ($o) => $o->id, $this->map->objects()))->not->toContain('arbeitsblatt')
+        ->and($this->map->find('arbeitsblatt'))->toBeNull();
+});
+
 it('finds one course by slug, or null when it is not there', function () {
     $found = $this->map->find('stimme-basics');
 
