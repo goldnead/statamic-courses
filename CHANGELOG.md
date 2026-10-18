@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 (2026-10-18)
+
+### Fixed
+- Video hints: "From" and "To" are validated in the lesson form (`mm:ss`, `h:mm:ss` or seconds; "From" is required).
+  A time the parser could not read made the hint button silently never appear. Sites that copied the blueprint add
+  the same rules by hand (`--merge` does not change an existing field).
+
 ## 0.5.0 (2026-10-18)
 
 ### Added

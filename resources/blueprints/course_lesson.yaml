@@ -441,6 +441,9 @@ tabs:
                     display: From
                     placeholder: '43:54'
                     width: 17
+                    validate:
+                      - required
+                      - 'regex:/^(\d+|\d{1,2}:\d{2}|\d{1,2}:\d{2}:\d{2})$/'
                 -
                   handle: to
                   field:
@@ -448,6 +451,9 @@ tabs:
                     display: To
                     placeholder: '56:57'
                     width: 17
+                    validate:
+                      - nullable
+                      - 'regex:/^(\d+|\d{1,2}:\d{2}|\d{1,2}:\d{2}:\d{2})$/'
                 -
                   handle: text
                   field:
