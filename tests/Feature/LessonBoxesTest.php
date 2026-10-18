@@ -2,6 +2,7 @@
 
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\StatamicOffers\Offers;
+use Illuminate\Validation\ValidationException;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\User;
 
@@ -106,4 +107,28 @@ it('can be added to a site whose blueprints predate it with --merge', function (
 
     expect(Blueprint::find('collections.course_lessons.course_lesson')->hasField('video_hints'))->toBeTrue()
         ->and(Blueprint::find('collections.course_lessons.course_lesson')->hasField('lesson_boxes'))->toBeTrue();
+});
+
+it('refuses a hint time the parser could not read, in front of the editor', function () {
+    // Only what is said about the hints counts: the lesson has other required fields.
+    $fails = function (array $row): bool {
+        try {
+            Blueprint::find('collections.course_lessons.course_lesson')
+                ->fields()
+                ->addValues(['title' => 'L', 'video_hints' => [$row]])
+                ->validator()
+                ->validate();
+
+            return false;
+        } catch (ValidationException $e) {
+            return collect(array_keys($e->errors()))->contains(fn (string $key): bool => str_starts_with($key, 'video_hints'));
+        }
+    };
+
+    expect($fails(['box' => ['b'], 'from' => '43:54', 'to' => null, 'text' => '']))->toBeFalse()
+        ->and($fails(['box' => ['b'], 'from' => '1:02:03', 'to' => '1:03:00', 'text' => '']))->toBeFalse()
+        ->and($fails(['box' => ['b'], 'from' => '2634', 'to' => '', 'text' => '']))->toBeFalse()
+        ->and($fails(['box' => ['b'], 'from' => '43.54', 'to' => null, 'text' => '']))->toBeTrue()
+        ->and($fails(['box' => ['b'], 'from' => '43:54', 'to' => 'bis Ende', 'text' => '']))->toBeTrue()
+        ->and($fails(['box' => ['b'], 'from' => '', 'to' => null, 'text' => '']))->toBeTrue();
 });
