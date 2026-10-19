@@ -5,8 +5,10 @@ namespace Goldnead\Courses\Integrations\Map;
 use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
 use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
 use Goldnead\BrandContext\Map\MapEdge;
+use Goldnead\BrandContext\Map\MapLookup;
 use Goldnead\BrandContext\Map\MapMetric;
 use Goldnead\BrandContext\Map\MapObject;
+use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\BrandContext\Map\MapPeriod;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Support\CourseRepository;
@@ -114,6 +116,15 @@ class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
 
         $explicit = trim((string) ($entry->get('product') ?? '')) !== '';
 
+        // A product named in the field is the author's word: a missing one is a
+        // broken reference and shows as such. The slug is only a guess ("the
+        // product usually has the course's name"): a guess that finds no product
+        // draws nothing, because a course can just as well be opened by an
+        // entitlement that no product sells (a lead magnet's access, say).
+        if (! $explicit && ! $this->productExists($product)) {
+            return null;
+        }
+
         return new MapEdge(
             fromType: 'product',
             fromId: $product,
@@ -123,6 +134,12 @@ class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
             label: __('courses::map.unlocks'),
             derivedFrom: $explicit ? 'course field `product`' : 'course slug (field `product` is empty)',
         );
+    }
+
+    /** Whether the map knows a product with this handle (needs the products addon on the map). */
+    protected function productExists(string $handle): bool
+    {
+        return app(MapObjectRegistry::class)->lookup('product', $handle)->status === MapLookup::FOUND;
     }
 
     protected function entry(string $slug): ?StatamicEntry
