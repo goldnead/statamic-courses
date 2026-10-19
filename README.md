@@ -359,6 +359,8 @@ With statamic-brand-context 1.17 or later, the funnels map can show courses as c
 `Goldnead\Courses\Integrations\Map\CourseMapObjects` (type `course`, id = course slug). Each card shows the title,
 a link to the entry in the Control Panel, published or not, and the learners who started the course in the
 period. Without brand-context nothing is registered and the map simply has no course type.
+With brand-context 1.18 or later, `CourseMapObjects` also draws one edge per course from its product (`product` →
+`unlocks` → course; the course slug when the `product` field is empty).
 
 ## Access
 

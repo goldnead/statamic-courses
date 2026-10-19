@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-10-19
+
+### Added
+- Funnels map: with statamic-brand-context 1.18 or later, every course draws an edge from the product that opens it
+  (`product` -> `unlocks` -> course). The product is the course's `product` field, or the course slug when the field
+  is empty. A course without a product slug has no edge. The edge carries no number.
+
+### Upgrading
+- No migration. The edges need statamic-brand-context 1.18 or later.
+
 ## 0.6.0 — 2026-10-18
 
 ### Added

@@ -2,7 +2,9 @@
 
 namespace Goldnead\Courses\Integrations\Map;
 
+use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
 use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
+use Goldnead\BrandContext\Map\MapEdge;
 use Goldnead\BrandContext\Map\MapMetric;
 use Goldnead\BrandContext\Map\MapObject;
 use Goldnead\BrandContext\Map\MapPeriod;
@@ -20,9 +22,12 @@ use Statamic\Query\Builder;
  * The card's number is the enrollments created in the period: a learner who
  * started the course, counted once per course and learner.
  *
+ * Each course also lists its edge to the product that opens it (brand-context
+ * 1.18): product -> unlocks -> course.
+ *
  * Registered only when statamic-brand-context is installed (ServiceProvider::boot).
  */
-class CourseMapObjects implements ProvidesMapObjects
+class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
 {
     public const TYPE = 'course';
 
@@ -80,6 +85,44 @@ class CourseMapObjects implements ProvidesMapObjects
             ->count();
 
         return new MapMetric($started, __('courses::map.started'), $period);
+    }
+
+    /**
+     * One edge per course: the product that opens it, unlocks, the course. A
+     * course without a product slug has no edge.
+     *
+     * @return array<int, MapEdge>
+     */
+    public function edges(): array
+    {
+        return $this->entries()
+            ->map(fn (StatamicEntry $entry): ?MapEdge => $this->edge($entry))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    protected function edge(StatamicEntry $entry): ?MapEdge
+    {
+        // The same product rule as the course's own `product` in CourseRepository.
+        $product = (string) ($this->courses->normalizeCourse($entry)['product'] ?? '');
+        $slug = (string) $entry->slug();
+
+        if ($product === '' || $slug === '') {
+            return null;
+        }
+
+        $explicit = trim((string) ($entry->get('product') ?? '')) !== '';
+
+        return new MapEdge(
+            fromType: 'product',
+            fromId: $product,
+            toType: self::TYPE,
+            toId: $slug,
+            kind: 'unlocks',
+            label: __('courses::map.unlocks'),
+            derivedFrom: $explicit ? 'course field `product`' : 'course slug (field `product` is empty)',
+        );
     }
 
     protected function entry(string $slug): ?StatamicEntry
