@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses;
 
+use Goldnead\BrandContext\Contracts\ProvidesMapEdges;
 use Goldnead\BrandContext\Contracts\ProvidesMapObjects;
 use Goldnead\BrandContext\Map\MapObjectRegistry;
 use Goldnead\Courses\Access\ClosedCourseAccess;
@@ -103,7 +104,7 @@ class ServiceProvider extends AddonServiceProvider
 
         // Courses as cards on the funnels map. brand-context is a `suggest`:
         // the interface is checked by name, the provider class not loaded without it.
-        if (interface_exists(ProvidesMapObjects::class)) {
+        if (interface_exists(ProvidesMapObjects::class) && interface_exists(ProvidesMapEdges::class)) {
             $this->app->make(MapObjectRegistry::class)->register(CourseMapObjects::class);
         }
     }
