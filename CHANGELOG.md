@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 — 2026-10-19
+
+### Fixed
+- Funnels map: a course without a `product` field no longer draws an edge from a product that does not exist. The
+  slug fallback (0.7.0) only draws the edge when the map knows a product with that handle; otherwise the map showed a
+  red "broken reference" card for a course that is opened some other way (a lead magnet's access, say). A product
+  named in the field stays an edge even when it is missing, because that one is a real broken reference. Without
+  the products addon on the map, the fallback draws nothing.
+
+### Upgrading
+- No migration.
+
 ## 0.7.0 — 2026-10-19
 
 ### Added
