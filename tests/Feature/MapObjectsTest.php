@@ -7,6 +7,8 @@ use Goldnead\Courses\Integrations\Map\CourseMapObjects;
 use Goldnead\Courses\Models\Enrollment;
 use Illuminate\Support\Carbon;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Role;
+use Statamic\Facades\User;
 
 /*
  * The funnels map's view of a course (statamic-brand-context 1.17). The map
@@ -142,4 +144,28 @@ it('details: a course without lessons has only the facts, material and unknown i
 
     expect($this->map->details('arbeitsblatt', MapPeriod::lastDays(30)))->toBeNull()
         ->and($this->map->details('gibt-es-nicht', MapPeriod::lastDays(30)))->toBeNull();
+});
+
+it('details: a draft lesson is neither listed nor counted', function () {
+    $this->makeLesson($this->chorId, 'live', ['title' => 'Live']);
+    $draft = Entry::make()->collection('course_lessons')->slug('entwurf')->published(false)
+        ->data(['title' => 'Entwurf', 'course' => $this->chorId]);
+    $draft->save();
+
+    $blocks = $this->map->details('cvt-im-chor-minikurs', MapPeriod::lastDays(30));
+
+    expect($blocks[0]['rows'][0]['value'])->toBe('1')
+        ->and(array_column($blocks[1]['items'], 'title'))->toBe(['Live']);
+});
+
+it('detailsAuthorized: only a user who may view the course entries, closed otherwise', function () {
+    $viewer = tap(User::make()->id('viewer')->email('viewer@example.test'))->save();
+    Role::make('course-viewer')->addPermission('view courses entries')->save();
+    $viewer->assignRole('course-viewer')->save();
+
+    $other = tap(User::make()->id('nobody')->email('nobody@example.test'))->save();
+
+    expect($this->map->detailsAuthorized('cvt-im-chor-minikurs', $viewer))->toBeTrue()
+        ->and($this->map->detailsAuthorized('cvt-im-chor-minikurs', $other))->toBeFalse()
+        ->and($this->map->detailsAuthorized('cvt-im-chor-minikurs', null))->toBeFalse();
 });

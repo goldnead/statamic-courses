@@ -108,7 +108,7 @@ class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
             return null;
         }
 
-        $lessons = $this->courses->lessonsFor((string) $entry->id());
+        $lessons = $this->publishedLessons($this->courses->lessonsFor((string) $entry->id()));
 
         $blocks = [[
             'kind' => 'facts',
@@ -145,6 +145,45 @@ class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
         $blocks[] = $block;
 
         return $blocks;
+    }
+
+    /**
+     * Whether this user may see the course's detail panel (brand-context 1.20).
+     * The panel shows lesson titles, so it asks for what the Control Panel asks
+     * for to show the course: view access to the courses collection's entries.
+     * No user, no panel.
+     */
+    public function detailsAuthorized(string $id, $user): bool
+    {
+        if ($user === null || ! method_exists($user, 'can')) {
+            return false;
+        }
+
+        return (bool) $user->can('view '.$this->courses->coursesCollection().' entries');
+    }
+
+    /**
+     * Drafts are not part of the course a learner sees, so the panel neither
+     * lists nor counts them. Filtered here, one query, so CourseRepository
+     * stays as other callers expect it.
+     *
+     * @param  Collection<int, array<string, mixed>>  $lessons
+     * @return Collection<int, array<string, mixed>>
+     */
+    protected function publishedLessons(Collection $lessons): Collection
+    {
+        if ($lessons->isEmpty()) {
+            return $lessons;
+        }
+
+        $published = $this->query()
+            ->whereIn('id', $lessons->pluck('id')->all())
+            ->where('published', true)
+            ->get()
+            ->map(fn ($lesson): string => (string) $lesson->id())
+            ->flip();
+
+        return $lessons->filter(fn (array $lesson): bool => $published->has($lesson['id']))->values();
     }
 
     /**
