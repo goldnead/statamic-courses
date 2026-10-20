@@ -99,3 +99,47 @@ it('is registered on boot and answers through the registry', function () {
         ->and($registry->lookup('course', 'stimme-basics')->status)->toBe(MapLookup::FOUND)
         ->and($registry->lookup('course', 'gibt-es-nicht')->status)->toBe(MapLookup::MISSING);
 });
+
+it('details: a facts block with the lesson count and a list block of lessons', function () {
+    $this->makeLesson($this->chorId, 'zweite', ['title' => 'Zweite', 'section_title' => 'Modul B', 'section_order' => 2, 'sort_order' => 1]);
+    $this->makeLesson($this->chorId, 'erste', ['title' => 'Erste', 'section_title' => 'Modul A', 'section_order' => 1, 'sort_order' => 1]);
+    $this->makeLesson($this->chorId, 'ohne', ['title' => 'Ohne Modul', 'section_order' => 3]);
+    $this->makeLesson($this->stimmId, 'fremd', ['title' => 'Fremd']);
+
+    $blocks = $this->map->details('cvt-im-chor-minikurs', MapPeriod::lastDays(30));
+
+    expect($blocks)->toHaveCount(2)
+        ->and($blocks[0]['kind'])->toBe('facts')
+        ->and($blocks[0]['rows'][0]['value'])->toBe('3')
+        ->and($blocks[1]['kind'])->toBe('list')
+        ->and(array_column($blocks[1]['items'], 'title'))->toBe(['Erste', 'Zweite', 'Ohne Modul'])
+        ->and($blocks[1]['items'][0]['meta'])->toBe('Modul A')
+        ->and($blocks[1]['items'][2]['meta'])->toBeNull()
+        ->and($blocks[1]['items'][0]['image'] ?? null)->toBeNull()
+        ->and($blocks[1]['more'] ?? null)->toBeNull();
+});
+
+it('details: shows at most 12 lessons and counts the rest in more', function () {
+    foreach (range(1, 15) as $n) {
+        $this->makeLesson($this->chorId, "l{$n}", ['title' => "L{$n}", 'sort_order' => $n]);
+    }
+
+    $blocks = $this->map->details('cvt-im-chor-minikurs', MapPeriod::lastDays(30));
+
+    expect($blocks[0]['rows'][0]['value'])->toBe('15')
+        ->and($blocks[1]['items'])->toHaveCount(12)
+        ->and($blocks[1]['more'])->toBe(3);
+});
+
+it('details: a course without lessons has only the facts, material and unknown ids give null', function () {
+    $blocks = $this->map->details('stimme-basics', MapPeriod::lastDays(30));
+
+    expect($blocks)->toHaveCount(1)
+        ->and($blocks[0]['kind'])->toBe('facts')
+        ->and($blocks[0]['rows'][0]['value'])->toBe('0');
+
+    $this->makeCourse('arbeitsblatt', ['title' => 'Arbeitsblatt', 'kind' => 'material']);
+
+    expect($this->map->details('arbeitsblatt', MapPeriod::lastDays(30)))->toBeNull()
+        ->and($this->map->details('gibt-es-nicht', MapPeriod::lastDays(30)))->toBeNull();
+});

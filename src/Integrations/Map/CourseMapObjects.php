@@ -13,6 +13,7 @@ use Goldnead\BrandContext\Map\MapPeriod;
 use Goldnead\Courses\Models\Enrollment;
 use Goldnead\Courses\Support\CourseRepository;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Statamic\Entries\Entry as StatamicEntry;
 use Statamic\Facades\Entry;
 use Statamic\Query\Builder;
@@ -32,6 +33,9 @@ use Statamic\Query\Builder;
 class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
 {
     public const TYPE = 'course';
+
+    /** Lessons the detail panel lists; the rest is counted in `more`. */
+    public const DETAIL_LESSONS = 12;
 
     public function __construct(protected CourseRepository $courses) {}
 
@@ -87,6 +91,60 @@ class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
             ->count();
 
         return new MapMetric($started, __('courses::map.started'), $period);
+    }
+
+    /**
+     * The detail panel (brand-context 1.19, found by method_exists): the number
+     * of lessons as a fact and the lessons themselves as a list. Read only, one
+     * lesson query per call. Material entries are no courses, so: null.
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    public function details(string $id, MapPeriod $period): ?array
+    {
+        $entry = $this->entry($id);
+
+        if (! $entry instanceof StatamicEntry) {
+            return null;
+        }
+
+        $lessons = $this->courses->lessonsFor((string) $entry->id());
+
+        $blocks = [[
+            'kind' => 'facts',
+            'title' => null,
+            'rows' => [[
+                'label' => __('courses::map.lessons'),
+                'value' => (string) $lessons->count(),
+                'href' => null,
+            ]],
+        ]];
+
+        if ($lessons->isEmpty()) {
+            return $blocks;
+        }
+
+        $block = [
+            'kind' => 'list',
+            'title' => __('courses::map.lessons'),
+            'items' => $lessons
+                ->take(self::DETAIL_LESSONS)
+                ->map(fn (array $lesson): array => [
+                    'title' => Str::limit((string) ($lesson['title'] ?: $lesson['slug']), 120),
+                    'meta' => ($lesson['section_title'] ?? '') !== '' ? Str::limit((string) $lesson['section_title'], 120) : null,
+                    'image' => null,
+                ])
+                ->values()
+                ->all(),
+        ];
+
+        if ($lessons->count() > self::DETAIL_LESSONS) {
+            $block['more'] = $lessons->count() - self::DETAIL_LESSONS;
+        }
+
+        $blocks[] = $block;
+
+        return $blocks;
     }
 
     /**

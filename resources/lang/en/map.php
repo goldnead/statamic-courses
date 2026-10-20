@@ -6,5 +6,6 @@ return [
     'material' => 'Material',
     'started' => 'Started',
     'unlocks' => 'unlocks',
+    'lessons' => 'Lessons',
 
 ];
