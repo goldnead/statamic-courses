@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+- Funnels map dry run of a course (statamic-brand-context 1.24): the course is unlocked, and each lesson shows when it
+  opens for a learner, by the course's drip schedule (days, schedule, date, day of month). Lessons after a payment or
+  with no known date are marked unknown. Read only: nothing is enrolled, opened, written or sent. Forty lessons at most,
+  the rest counted in one line.
+
 ## 0.8.0 — 2026-10-21
 
 ### Added

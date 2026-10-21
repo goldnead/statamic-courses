@@ -32,6 +32,8 @@ use Statamic\Query\Builder;
  */
 class CourseMapObjects implements ProvidesMapEdges, ProvidesMapObjects
 {
+    use SimulatesCourse;
+
     public const TYPE = 'course';
 
     /** Lessons the detail panel lists; the rest is counted in `more`. */
