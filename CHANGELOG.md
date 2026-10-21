@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.0 — 2026-10-21
+
 ### Added
 - Funnels map detail panel: a course card now opens with the number of lessons and the lessons themselves (title,
   section as the small line), twelve at most, the rest counted. Read only, one lesson query. Needs
