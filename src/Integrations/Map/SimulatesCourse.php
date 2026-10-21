@@ -86,6 +86,12 @@ trait SimulatesCourse
         $title = (string) ($lesson['title'] ?: $lesson['slug']);
         $meta = ['lesson' => $lesson['slug'], 'course' => $id];
 
+        // After a trial: open at once for someone who bought without one, after the first charge for someone who
+        // did. Whether the person has a trial depends on the product she buys, which the course does not know.
+        if (($course['drip_mode'] ?? null) === 'after_trial' && (int) ($lesson['drip_after'] ?? 0) >= 1) {
+            return new Effect(Effect::UNKNOWN, $title, __('courses::map.sim_after_trial'), 0, $meta);
+        }
+
         $gate = $drip->gate($course, $lesson, $enrollment, $at);
 
         if (! $gate['locked']) {
