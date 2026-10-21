@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.1 — 2026-10-21
+
 ### Added
 - Funnels map dry run of a course (statamic-brand-context 1.24): the course is unlocked, and each lesson shows when it
   opens for a learner, by the course's drip schedule (days, schedule, date, day of month). Lessons after a payment or
