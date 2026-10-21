@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Funnels map detail panel: a course card now opens with the number of lessons and the lessons themselves (title,
+  section as the small line), twelve at most, the rest counted. Read only, one lesson query. Needs
+  statamic-brand-context 1.19 for the panel; older versions simply do not ask.
+- Funnels map detail panel: shown only to users who may view the courses collection's entries
+  (`detailsAuthorized`, closed without a user). Needs statamic-brand-context 1.20; on 1.19 the panel stays empty.
+  Lessons in draft are neither listed nor counted.
+
 ## 0.7.1 — 2026-10-19
 
 ### Fixed
