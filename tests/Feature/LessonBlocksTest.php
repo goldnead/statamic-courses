@@ -65,6 +65,62 @@ it('turns the stored blocks into template data, older content first, empty and s
         ->and($blocks[7])->toMatchArray(['url' => 'https://example.test/book', 'style' => 'secondary']);
 });
 
+describe('bare asset paths and containers', function () {
+    beforeEach(function () {
+        Storage::fake('recordings', ['url' => '/recordings']);
+        AssetContainer::make('coaching_recordings')->disk('recordings')->save();
+        Storage::disk('recordings')->put('aufnahmen/session.mp3', 'x');
+
+        Storage::fake('extra', ['url' => '/extra']);
+        AssetContainer::make('extra')->disk('extra')->save();
+        Storage::disk('extra')->put('bonus/blatt.pdf', 'x');
+
+        config()->set('courses.downloads.container', 'assets');
+    });
+
+    it('never resolves a bare path against coaching_recordings', function () {
+        Entry::find($this->lesson)->set('blocks', [
+            ['id' => 'c1', 'type' => 'download', 'file' => 'aufnahmen/session.mp3', 'label' => 'Recording'],
+        ])->save();
+
+        $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir');
+
+        expect(collect($blocks)->where('type', 'download')->all())->toBe([]);
+    });
+
+    it('does not resolve a bare path in a container outside the allow-list', function () {
+        Entry::find($this->lesson)->set('blocks', [
+            ['id' => 'c2', 'type' => 'download', 'file' => 'bonus/blatt.pdf', 'label' => 'Extra'],
+        ])->save();
+
+        $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir');
+
+        expect(collect($blocks)->where('type', 'download')->all())->toBe([]);
+    });
+
+    it('resolves a bare path in a container the allow-list names', function () {
+        config()->set('courses.downloads.containers', ['extra']);
+        Entry::find($this->lesson)->set('blocks', [
+            ['id' => 'c3', 'type' => 'download', 'file' => 'bonus/blatt.pdf', 'label' => 'Extra'],
+        ])->save();
+
+        $blocks = collect(app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir'))->where('type', 'download')->values();
+
+        expect($blocks->pluck('label')->all())->toBe(['Extra']);
+    });
+
+    it('keeps coaching_recordings out even when the allow-list names it', function () {
+        config()->set('courses.downloads.containers', ['coaching_recordings']);
+        Entry::find($this->lesson)->set('blocks', [
+            ['id' => 'c4', 'type' => 'download', 'file' => 'aufnahmen/session.mp3', 'label' => 'Recording'],
+        ])->save();
+
+        $blocks = app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'choir');
+
+        expect(collect($blocks)->where('type', 'download')->all())->toBe([]);
+    });
+});
+
 describe('private downloads', function () {
     beforeEach(function () {
         config()->set('private-media.source.container', 'private');
