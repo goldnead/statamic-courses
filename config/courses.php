@@ -82,10 +82,16 @@ return [
     | container other than the private one. A private download has its own
     | field on statamic-private-media's container (`private-media.source.container`).
     |
+    | `containers` is the allow-list a bare file path is looked up in (a block
+    | stores no container handle): these plus `container`. Empty takes every
+    | container. `coaching_recordings` is never searched.
+    | Comma-separated in COURSES_DOWNLOADS_CONTAINERS.
+    |
     */
 
     'downloads' => [
         'container' => env('COURSES_DOWNLOADS_CONTAINER'),
+        'containers' => array_values(array_filter(array_map('trim', explode(',', (string) env('COURSES_DOWNLOADS_CONTAINERS', ''))))),
     ],
 
     /*

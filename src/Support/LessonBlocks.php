@@ -2,6 +2,7 @@
 
 namespace Goldnead\Courses\Support;
 
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Statamic\Contracts\Assets\Asset as AssetContract;
 use Statamic\Entries\Entry as StatamicEntry;
@@ -37,6 +38,9 @@ use Throwable;
  */
 class LessonBlocks
 {
+    /** Containers a bare path never resolves against, whatever the config says. */
+    public const NEVER_SEARCHED = ['coaching_recordings'];
+
     public const PRIVATE_MEDIA = 'Goldnead\\PrivateMedia\\PrivateMedia';
 
     /** What a private download is signed for, and what CourseMediaAccess answers. */
@@ -399,10 +403,11 @@ class LessonBlocks
             return $asset instanceof AssetContract ? $asset : null;
         }
 
-        // A bare path: the field's container stores paths only. The
-        // configured one first, then any container that has the file.
+        // A bare path: the field's container stores paths only. Only the
+        // containers the config allows are searched, the configured one first.
         $configured = config('courses.downloads.container');
-        $containers = AssetContainer::all()->sortBy(fn ($container): int => $container->handle() === $configured ? 0 : 1);
+        $containers = $this->searchableContainers()
+            ->sortBy(fn ($container): int => $container->handle() === $configured ? 0 : 1);
 
         foreach ($containers as $container) {
             $asset = $container->asset($value);
@@ -413,6 +418,34 @@ class LessonBlocks
         }
 
         return null;
+    }
+
+    /**
+     * The containers a bare path may resolve against: the allow-list
+     * (`courses.downloads.containers`) plus the configured download container.
+     * Private-media's container is always in. With neither set, every container. A container in
+     * NEVER_SEARCHED is out in every case, the allow-list cannot add it.
+     *
+     * @return Collection<int, \Statamic\Contracts\Assets\AssetContainer>
+     */
+    protected function searchableContainers(): Collection
+    {
+        $allowed = array_values(array_filter(
+            array_merge((array) config('courses.downloads.containers', []), [config('courses.downloads.container')]),
+            fn ($handle): bool => is_string($handle) && $handle !== '',
+        ));
+
+        $containers = AssetContainer::all()->reject(fn ($container): bool => in_array($container->handle(), self::NEVER_SEARCHED, true));
+
+        if ($allowed === []) {
+            return $containers->values();
+        }
+
+        // A private download names its file by bare path in private-media's
+        // container, so that one is always searchable.
+        $allowed[] = config('private-media.source.container');
+
+        return $containers->filter(fn ($container): bool => in_array($container->handle(), $allowed, true))->values();
     }
 
     protected function link(mixed $value): ?string
