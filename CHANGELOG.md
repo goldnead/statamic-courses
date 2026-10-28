@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.8.2 — 2026-10-28
+
+### Fixed
+
+- A bare file path in a lesson block (a block stores no container handle) is now looked up only in the allowed
+  containers: `courses.downloads.containers` (env `COURSES_DOWNLOADS_CONTAINERS`, comma-separated) plus
+  `courses.downloads.container`. Before, every asset container was searched, so a lesson could resolve a file
+  from a container that was never meant for courses. `coaching_recordings` is never searched, whatever the
+  config says. With neither setting present every container is searched as before, except `coaching_recordings`.
 ## 0.8.1 — 2026-10-21
 
 ### Added
