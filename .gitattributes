@@ -17,3 +17,6 @@
 # Deliberately kept: /dist (the built CP bundle), /config, /database,
 # /resources/blueprints, /resources/lang, /routes, /src, README.md,
 # CHANGELOG.md, LICENSE.md.
+
+# Internal listing files: not needed by installing sites.
+/art                export-ignore
