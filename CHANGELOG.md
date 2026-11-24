@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Failures in the payments and assessments bridges no longer pass quietly: a plan lookup that fails while a subscription starts (its trial end is then unknown, and `after_trial` drip treats that as open) and an unreadable payment list on a failed cycle are logged as errors, and the course-level error logs now carry the exception with its stack trace instead of only its message. No behaviour change, no migration, no new config key.
+
 ## 0.8.3 — 2026-11-16
 
 ### Changed
