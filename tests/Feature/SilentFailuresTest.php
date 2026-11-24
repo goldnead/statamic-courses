@@ -75,3 +75,20 @@ it('logs the exception itself, with its trace, when a subscription event fails f
         fn ($message, $context = []) => str_contains($message, 'could not be applied') && ($context['exception'] ?? null) instanceof RuntimeException
     );
 });
+
+it('logs a catalogue that cannot be read instead of dropping the grants of a product', function () {
+    app()->bind(Catalogue::class, fn () => new class extends Catalogue
+    {
+        public function find(string $handle): ?array
+        {
+            throw new RuntimeException('catalogue unreachable');
+        }
+    });
+    Log::spy();
+
+    event(new SubscriptionStarted(new FakeSubscription(starts_at: Carbon::now()->addMonth())));
+
+    Log::shouldHaveReceived('error')->withArgs(
+        fn ($message, $context = []) => str_contains($message, 'catalogue') && ($context['product'] ?? null) === 'monthly-membership' && ($context['exception'] ?? null) instanceof RuntimeException
+    )->once();
+});
