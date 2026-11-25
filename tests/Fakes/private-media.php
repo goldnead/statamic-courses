@@ -22,8 +22,14 @@ namespace Goldnead\PrivateMedia {
         {
             public static bool $signs = false;
 
+            public static bool $throws = false;
+
             public function url(mixed $user, string $resource, mixed $asset, ?int $ttlMinutes = null): ?string
             {
+                if (self::$throws) {
+                    throw new \RuntimeException('signer down');
+                }
+
                 if (! self::$signs || $user === null) {
                     return null;
                 }
