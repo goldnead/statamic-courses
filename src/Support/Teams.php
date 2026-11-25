@@ -249,7 +249,7 @@ class Teams
             // per member and request: an outage would otherwise write a line
             // for every seat of every team on every page view.
             $key = $product.'|'.$e::class;
-            $now = time();
+            $now = now()->getTimestamp();
 
             if (($now - (self::$warnedAt[$key] ?? 0)) >= self::WARN_EVERY_SECONDS) {
                 self::$warnedAt[$key] = $now;
