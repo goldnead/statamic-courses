@@ -30,6 +30,11 @@ use Throwable;
  */
 class Teams
 {
+    private const WARN_EVERY_SECONDS = 60;
+
+    /** @var array<string, int> when the failing access check was last logged, per product and exception class */
+    private static array $warnedAt = [];
+
     public function __construct(
         protected CourseAccess $access,
         protected Holds $holds,
@@ -240,14 +245,30 @@ class Teams
         } catch (Throwable $e) {
             // Fail closed, but not silently: a team member losing access
             // because the access check broke must be findable in the log.
-            Log::warning('statamic-courses: team access check failed, treated as no access.', [
-                'course' => $course['slug'] ?? null,
-                'product' => $product,
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
-            ]);
+            // Told once per product and exception class and minute, not once
+            // per member and request: an outage would otherwise write a line
+            // for every seat of every team on every page view.
+            $key = $product.'|'.$e::class;
+            $now = time();
+
+            if (($now - (self::$warnedAt[$key] ?? 0)) >= self::WARN_EVERY_SECONDS) {
+                self::$warnedAt[$key] = $now;
+
+                Log::warning('statamic-courses: team access check failed, treated as no access.', [
+                    'course' => $course['slug'] ?? null,
+                    'product' => $product,
+                    'exception' => $e::class,
+                    'message' => $e->getMessage(),
+                ]);
+            }
 
             return false;
         }
+    }
+
+    /** For tests: let the throttled warning fire again. */
+    public static function resetWarnings(): void
+    {
+        self::$warnedAt = [];
     }
 }
