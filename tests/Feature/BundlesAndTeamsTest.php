@@ -1,12 +1,17 @@
 <?php
 
+use Goldnead\Courses\Contracts\CourseAccess;
 use Goldnead\Courses\Events\TeamMemberAdded;
 use Goldnead\Courses\Events\TeamMemberRemoved;
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Courses\Models\TeamMember;
+use Goldnead\Courses\Support\CourseRepository;
+use Goldnead\Courses\Support\Holds;
+use Goldnead\Courses\Support\Teams;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Statamic\Facades\User;
 
 beforeEach(function () {
@@ -126,4 +131,22 @@ describe('teams', function () {
             ->and(Courses::addTeamMember($this->owner, 'team-course', 'owner@example.test'))->toBeNull()
             ->and(Courses::team($this->other, 'team-course'))->toBeNull();
     });
+});
+
+it('logs a failing access check for a team seat instead of silently denying', function () {
+    $access = new class implements CourseAccess
+    {
+        public function allows(mixed $user, array $course): bool
+        {
+            throw new RuntimeException('entitlements down');
+        }
+    };
+    $teams = new Teams($access, app(Holds::class), app(CourseRepository::class));
+    Log::spy();
+
+    $method = new ReflectionMethod($teams, 'holdsProduct');
+
+    expect($method->invoke($teams, 'owner-1', 'choir-pro', ['slug' => 'choir']))->toBeFalse();
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($m) => str_contains((string) $m, 'team access check failed'))->once();
 });

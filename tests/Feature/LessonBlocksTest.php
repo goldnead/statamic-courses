@@ -4,6 +4,7 @@ use Goldnead\Courses\Support\LessonBlocks;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
 use Goldnead\PrivateMedia\PrivateMedia;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Entry;
@@ -138,6 +139,16 @@ describe('private downloads', function () {
 
     afterEach(function () {
         PrivateMedia::$signs = false;
+        PrivateMedia::$throws = false;
+    });
+
+    it('logs a signer failure instead of dropping the download silently', function () {
+        PrivateMedia::$throws = true;
+        Log::spy();
+
+        app(LessonBlocks::class)->for(Entry::find($this->lesson), $this->user, 'course:choir');
+
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m) => str_contains((string) $m, 'could not be signed'))->atLeast()->once();
     });
 
     it('drops a private download it cannot have signed', function () {

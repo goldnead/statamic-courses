@@ -380,7 +380,13 @@ class LessonBlocks
 
         try {
             $url = app(self::PRIVATE_MEDIA)->url($user, $resource, $asset);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::warning('statamic-courses: a private download could not be signed and is left out.', [
+                'resource' => $resource,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
             return null;
         }
 

@@ -8,6 +8,7 @@ use Goldnead\Courses\Events\TeamMemberRemoved;
 use Goldnead\Courses\Models\TeamMember;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -236,7 +237,16 @@ class Teams
     {
         try {
             return $this->access->allows($owner, [...$course, 'product' => $product, 'bundles' => []]);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Fail closed, but not silently: a team member losing access
+            // because the access check broke must be findable in the log.
+            Log::warning('statamic-courses: team access check failed, treated as no access.', [
+                'course' => $course['slug'] ?? null,
+                'product' => $product,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
             return false;
         }
     }

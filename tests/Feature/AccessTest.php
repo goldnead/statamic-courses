@@ -7,6 +7,7 @@ use Goldnead\Courses\CourseProgress;
 use Goldnead\Courses\Facades\Courses;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
+use Illuminate\Support\Facades\Log;
 use Statamic\Facades\User;
 
 beforeEach(function () {
@@ -79,4 +80,15 @@ it('finds a grant statamic-payments wrote to the buyer\'s email address, with no
 it('refuses a guest and an unknown course', function () {
     expect(Courses::canAccess(null, 'cvt-101'))->toBeFalse()
         ->and(Courses::canAccess('user-1', 'nope'))->toBeFalse();
+});
+
+it('says once in the log why every course is closed', function () {
+    ClosedCourseAccess::resetWarning();
+    Log::spy();
+
+    $closed = new ClosedCourseAccess;
+    expect($closed->allows(null, ['slug' => 'a']))->toBeFalse()
+        ->and($closed->allows(null, ['slug' => 'b']))->toBeFalse();
+
+    Log::shouldHaveReceived('warning')->withArgs(fn ($m) => str_contains((string) $m, 'every course is closed'))->once();
 });
