@@ -22,7 +22,7 @@ it('logs a failing user lookup for a team member and still sends the address', f
     expect($payload['member'])->toBe(['email' => 'mia@example.test']);
 
     Log::shouldHaveReceived('warning')
-        ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'member') && ($context['exception'] ?? null) instanceof RuntimeException)
+        ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'member') && ($context['exception'] ?? null) === RuntimeException::class)
         ->once();
 });
 
@@ -36,6 +36,6 @@ it('logs a failing course lookup and still sends the course without a title', fu
     expect($payload['course'])->toMatchArray(['id' => 'entry-1', 'slug' => 'club', 'title' => null]);
 
     Log::shouldHaveReceived('warning')
-        ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'course') && ($context['exception'] ?? null) instanceof RuntimeException)
+        ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'course') && ($context['exception'] ?? null) === RuntimeException::class)
         ->once();
 });
