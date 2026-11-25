@@ -110,7 +110,12 @@ class PaymentsBridge
             $refs = method_exists($subscription, 'payments')
                 ? collect($subscription->payments()->pluck('provider_id'))->all()
                 : [];
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // The hold then narrows by the subscription's own id only; say so.
+            Log::error('statamic-courses: the payments of a subscription could not be read; its grants are matched by provider id only.', [
+                'subscription_id' => $this->idOf($subscription),
+                'exception' => $e,
+            ]);
             $refs = [];
         }
 
@@ -162,7 +167,7 @@ class PaymentsBridge
                 Log::error('statamic-courses: a subscription event could not be applied to a course.', [
                     'course' => $course['slug'],
                     'subscription_id' => $subscription->id ?? null,
-                    'exception' => $e->getMessage(),
+                    'exception' => $e,
                 ]);
             }
         }
@@ -194,7 +199,12 @@ class PaymentsBridge
 
         try {
             $entry = class_exists(self::CATALOGUE) ? app(self::CATALOGUE)->find($handle) : null;
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Not "grants nothing": a bundle or grant course would silently miss the event.
+            Log::error('statamic-courses: the catalogue entry of a subscription product could not be read; its grants are unknown.', [
+                'product' => $handle,
+                'exception' => $e,
+            ]);
             $entry = null;
         }
 
@@ -224,7 +234,14 @@ class PaymentsBridge
     {
         try {
             $plan = class_exists(self::SUBSCRIPTIONS) ? app(self::SUBSCRIPTIONS)->planFor((string) ($subscription->product ?? '')) : null;
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // Not "no trial": the plan could not be read, and after_trial
+            // drip treats a missing trial as open.
+            Log::error('statamic-courses: the plan of a subscription could not be read; its trial end is unknown.', [
+                'product' => $subscription->product ?? null,
+                'subscription_id' => $this->idOf($subscription),
+                'exception' => $e,
+            ]);
             $plan = null;
         }
 

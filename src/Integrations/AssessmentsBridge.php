@@ -67,7 +67,7 @@ class AssessmentsBridge
                 Log::error('statamic-courses: an assessment result could not be applied to a course.', [
                     'course' => $course['slug'],
                     'assessment' => $handle,
-                    'exception' => $e->getMessage(),
+                    'exception' => $e,
                 ]);
             }
         }
