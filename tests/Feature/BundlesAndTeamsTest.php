@@ -133,7 +133,45 @@ describe('teams', function () {
     });
 });
 
+// The throttle is static state: leave none behind for the next test.
+afterEach(fn () => Teams::resetWarnings());
+
+it('logs a broken access check once per product, not once per member and request', function () {
+    Teams::resetWarnings();
+    $access = new class implements CourseAccess
+    {
+        public function allows(mixed $user, array $course): bool
+        {
+            throw new RuntimeException('entitlements down');
+        }
+    };
+    $teams = new Teams($access, app(Holds::class), app(CourseRepository::class));
+    Log::spy();
+
+    $method = new ReflectionMethod($teams, 'holdsProduct');
+
+    foreach (range(1, 5) as $i) {
+        expect($method->invoke($teams, 'owner-'.$i, 'choir-pro', ['slug' => 'choir']))->toBeFalse();
+    }
+
+    // Another product is another problem and is told once as well.
+    $method->invoke($teams, 'owner-1', 'other-product', ['slug' => 'choir']);
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($m) => str_contains((string) $m, 'team access check failed'))->twice();
+
+    // A minute later an ongoing outage is told again: the throttle is a window, not a mute.
+    test()->travel(61)->seconds();
+    $method->invoke($teams, 'owner-1', 'choir-pro', ['slug' => 'choir']);
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn ($m) => str_contains((string) $m, 'team access check failed'))->times(3);
+
+    Teams::resetWarnings();
+});
+
 it('logs a failing access check for a team seat instead of silently denying', function () {
+    Teams::resetWarnings();
     $access = new class implements CourseAccess
     {
         public function allows(mixed $user, array $course): bool
