@@ -287,7 +287,10 @@ final class WebhookPayload
     {
         try {
             $user = User::findByEmail($email);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            // The address still goes out, just without a name: say so in the log.
+            Log::warning('[courses] webhook payload: member lookup failed, sent without a name.', ['exception' => $e]);
+
             $user = null;
         }
 
@@ -316,7 +319,9 @@ final class WebhookPayload
         try {
             $entry = Entry::find($id);
             $title = $entry instanceof StatamicEntry ? $entry->get('title') : null;
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            Log::warning('[courses] webhook payload: course lookup failed, sent without a title.', ['exception' => $e]);
+
             $title = null;
         }
 
@@ -342,7 +347,9 @@ final class WebhookPayload
         if (class_exists($model)) {
             try {
                 $handle = $model::query()->whereKey($brandId)->value('handle');
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                Log::warning('[courses] webhook payload: brand lookup failed, sent without a handle.', ['exception' => $e]);
+
                 $handle = null;
             }
         }
