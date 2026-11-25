@@ -117,7 +117,11 @@ class WebhookManagerBridge
         try {
             DB::afterCommit(fn () => $this->deliver($handle, $event));
         } catch (\Throwable $e) {
-            Log::warning('Courses → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage());
+            Log::warning('Courses → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage(), [
+                'handle' => $handle,
+                'event' => $event::class,
+                'exception' => $e::class,
+            ]);
         }
     }
 
@@ -127,6 +131,12 @@ class WebhookManagerBridge
             $trigger = WebhookManager::triggers()->get($handle);
 
             if ($trigger === null) {
+                Log::warning('Courses → Webhook Manager: ['.$handle.'] has no trigger registered, not dispatched.', [
+                    'handle' => $handle,
+                    'event' => $event::class,
+                    'brand_id' => $event->brandId ?? null,
+                ]);
+
                 return;
             }
 
@@ -140,7 +150,12 @@ class WebhookManagerBridge
                 $handle,
             );
         } catch (\Throwable $e) {
-            Log::warning('Courses → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage());
+            Log::warning('Courses → Webhook Manager: ['.$handle.'] not dispatched: '.$e->getMessage(), [
+                'handle' => $handle,
+                'event' => $event::class,
+                'brand_id' => $event->brandId ?? null,
+                'exception' => $e::class,
+            ]);
         }
     }
 }

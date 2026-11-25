@@ -238,3 +238,30 @@ it('never breaks the course write when the webhook manager throws', function () 
 
     expect(Courses::summary('lena', 'stimme'))->toBeArray();
 });
+
+it('logs a failed delivery with its handle, event class and brand', function () {
+    Event::listen(TriggerDetected::class, fn () => throw new RuntimeException('down'));
+    Log::spy();
+
+    Courses::enroll('lena', 'stimme');
+
+    Log::shouldHaveReceived('warning')->withArgs(
+        fn ($message, $context = []) => ($context['handle'] ?? null) === 'courses.learner_enrolled'
+            && ($context['event'] ?? null) === LearnerEnrolled::class
+            && array_key_exists('brand_id', $context)
+    );
+});
+
+it('logs a moment whose trigger is not registered, with its handle and brand', function () {
+    Log::spy();
+    $bridge = new WebhookManagerBridge;
+    $deliver = new ReflectionMethod($bridge, 'deliver');
+
+    $deliver->invoke($bridge, 'courses.unbekannt', (object) ['brandId' => 7]);
+
+    Log::shouldHaveReceived('warning')->withArgs(
+        fn ($message, $context = []) => str_contains($message, 'courses.unbekannt')
+            && ($context['handle'] ?? null) === 'courses.unbekannt'
+            && ($context['brand_id'] ?? null) === 7
+    );
+});

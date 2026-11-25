@@ -136,7 +136,17 @@ class AssessmentsBridge
     {
 
         foreach ($this->courses->lessons($learner, $course['slug']) ?? [] as $lesson) {
-            if (($lesson['assessment'] ?? null) !== $handle || $lesson['is_locked']) {
+            if (($lesson['assessment'] ?? null) !== $handle) {
+                continue;
+            }
+
+            if ($lesson['is_locked']) {
+                Log::info('statamic-courses: an assessment result for a locked lesson; not applied.', [
+                    'course' => $course['slug'],
+                    'lesson' => $lesson['slug'],
+                    'assessment' => $handle,
+                ]);
+
                 continue;
             }
 

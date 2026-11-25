@@ -10,6 +10,7 @@ use Goldnead\Courses\Facades\Courses;
 use Goldnead\Entitlements\Facades\Entitlements;
 use Goldnead\Entitlements\Support\SubjectReference;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Statamic\Facades\Entry;
 use Statamic\Facades\User;
 
@@ -98,6 +99,23 @@ it('ignores other assessments and courses the learner cannot open', function () 
     event(submitted(10));
 
     expect(Courses::lesson('learner', 'closed', 'q')['is_completed'])->toBeFalse();
+});
+
+it('logs a result that a locked quiz lesson discards, with the course and lesson handle', function () {
+    $id = $this->makeCourse('gesperrt-kurs', ['sequencing_mode' => 'lesson']);
+    $this->makeLesson($id, 'vorher', ['sort_order' => 1, 'item_type' => 'text']);
+    $this->makeLesson($id, 'quiz', ['sort_order' => 2, 'item_type' => 'quiz', 'assessment' => 'stimm-check']);
+    Entitlements::grant(new SubjectReference('user', 'learner'), 'gesperrt-kurs', 'test');
+    $this->actingAs($this->user);
+    Log::spy();
+
+    event(submitted(10));
+
+    Log::shouldHaveReceived('info')->withArgs(
+        fn ($message, $context = []) => ($context['course'] ?? null) === 'gesperrt-kurs'
+            && ($context['lesson'] ?? null) === 'quiz'
+            && ($context['assessment'] ?? null) === 'stimm-check'
+    );
 });
 
 it('announces a pass once, not again on a retake', function () {
